@@ -20,17 +20,20 @@ The app runs on port 3000 (`PORT` overrides it). `npm run dev` restarts on edits
 
 ## Workflow
 
-1. A visitor supplies event, contact, space, and setup details.
-2. The request is saved locally and emailed **only to melvin.anaya@newcitystc.church during testing**.
-3. Melvin uses the private, 14-day approval link in the email and explicitly approves. Opening the link alone does not approve anything.
-4. Approval emails **facilities@newcitystc.church (Darrell Bearce)** and **mark.forbes@newcitystc.church (Mark Forbes)**. Retrying a completed approval does not resend notifications.
-5. Calendar creation is currently manual. The emails and UI explicitly say that Planning Center is not connected.
+1. A visitor supplies event, contact, room, equipment and quantity details.
+2. The app sends a separate private approval link to each applicable approver:
+   - Upper Elementary, Lower Elementary, City Students, Pre K and Nursery: Milyn Farrier (`milyn.farrier@newcitystc.church`) or Hope (`hope.varwig@newcitystc.church`).
+   - Worship Center: Melvin (`melvin.anaya@newcitystc.church`) or Hope.
+   - City Commons, Kitchen, Entire Building and Other: Hope.
+3. Either assigned person can approve a room group. Requests spanning different groups require coverage of each group; Hope can approve all groups. For example, a classroom + Worship Center request can be approved by Hope alone, or by Milyn and Melvin together. Each person receives one email even when multiple rooms are selected. Opening a link does not approve.
+4. Once all selected room groups are approved, the app notifies `facilities@newcitystc.church` (Darrell) and `mark.forbes@newcitystc.church` (Mark). Duplicate or late approvals do not resend completed notifications.
+5. **Planning Center Calendar entry is manual.** Its current public Calendar API has no event creation operation. Emails explicitly request manual calendar entry.
 
-Approval links are bearer credentials; do not forward them. Their tokens are stored only as hashes, transmitted in the URL fragment, and removed from browser history when the approval page loads.
+Approval links expire after 14 days and act as bearer credentials; do not forward them. Tokens are stored only as hashes, carried in URL fragments, and removed from the browser URL when the approval page loads. Approval records must survive restarts for the links to work. Render Free currently has no durable storage configured; it remains unsuitable for real requests until storage is connected.
 
 ## Google Workspace email configuration
 
-During testing, all emails are sent as **melvin.anaya@newcitystc.church** through the Gmail API. Melvin must authorize this app using his church Google account. Melvin is temporarily the test approver. Restore Hope as the approval recipient and update the test-mode wording before accepting real requests. Before switching the sender to Hope, she must authorize her account and the sender and refresh token must be updated together. Resend is no longer used. Selecting an email address does not establish authorization.
+During testing, all emails are sent as **melvin.anaya@newcitystc.church** through the Gmail API. Melvin must authorize this app using his church Google account. Approval recipients follow the room routing above; Melvin remains the authorized email sender until Hope authorizes her mailbox. Before switching the sender to Hope, she must authorize her account and the sender and refresh token must be updated together. Resend is no longer used. Selecting an email address does not establish authorization.
 
 A Google Workspace / Google Cloud administrator should:
 
@@ -40,12 +43,14 @@ A Google Workspace / Google Cloud administrator should:
 4. Store `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN` securely in environment settings. Do not commit these values or paste them in chat. The cloud configuration declares secret requirements, not values.
 5. Set `PUBLIC_BASE_URL` to the actual HTTPS origin serving this app. It must not point to the existing church website unless this app is deployed there.
 
-`MAIL_FROM` is no longer read: Melvin's test sender address is fixed in the app. Remove the obsolete `RESEND_API_KEY` and `MAIL_FROM` requirements in the configuration review UI. Google OAuth token refresh and Gmail send are implemented, but live delivery has not been verified without credentials. Tests mock both Google endpoints and send no real email. Gmail does not promise idempotency based on Message-ID; after an ambiguous network interruption, check the authorized sender's Sent folder before retrying.
+`MAIL_FROM` is no longer read: Melvin's test sender address is fixed in the app. Remove the obsolete `RESEND_API_KEY` and `MAIL_FROM` requirements in the configuration review UI. Google OAuth token refresh and Gmail send are implemented. The user confirmed receipt of a test email from the Render deployment; the new room routing is verified with mocked email tests and still needs a coordinated live check. Tests mock both Google endpoints and send no real email. Gmail does not promise idempotency based on Message-ID; after an ambiguous network interruption, check the authorized sender's Sent folder before retrying.
 
 `DATA_DIR` optionally sets a persistent private request directory; default is `.data/requests` in the checkout. Retain records across restarts. No records are publicly served. Without Google configuration, visitors see preview mode and submitting returns an honest unavailable message.
 
-## Planning Center connection — pending
+## Planning Center Calendar limitation
 
-Automatic calendar creation is **not implemented or verified**. Before implementing it, obtain a supported Planning Center Calendar API connection with write access, the target calendar/event ownership details, and the actual room/resource identifiers. Confirm the supported event-creation workflow and conflict handling against the church's account. Do not put credentials in chat. Use secure environment settings. The proposed room options are preferences, not synced Planning Center resources.
+Automatic creation is unavailable through the documented public Calendar API. The official [2026-06-22 OpenAPI specification](https://api.planningcenteronline.com/calendar/v2/open_api/2026-06-22) exposes GET for `/events`, `/events/{event_id}`, event instances, and resource requests, with no POST operation to create an event. Credentials cannot enable an operation absent from the supported API. Calendar notifications therefore ask Darrell/Mark to enter approved events manually; `calendarConfigured` remains false.
 
-The prior form at https://newcitystc.church/new-page returned HTTP 403 during setup, so its fields could not be inspected. Confirm the proposed fields and spaces before launch. The page is not published to the church website.
+Before building any alternative calendar automation, confirm a supported creation method with Planning Center. Do not use private endpoints or browser automation with shared account passwords as a substitute.
+
+The prior form at https://newcitystc.church/new-page returned HTTP 403 during initial setup. Fields and room names now follow the user's provided requirements. This app is deployed separately on Render, not published into Squarespace.

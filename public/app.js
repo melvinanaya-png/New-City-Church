@@ -38,7 +38,7 @@ form.addEventListener('submit', async event => {
     const response = await fetch('/api/requests', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
     const body = await response.json();
     if(!response.ok) throw new Error(body.error || 'We could not send your request.');
-    result.className = 'success'; result.textContent = `Test request sent to Melvin for approval! Your reference is ${body.id}. The team will review your plans and contact you. Your event is not yet confirmed or added to the calendar.`;
+    result.className = 'success'; result.textContent = `Request sent to your room approvers! Your reference is ${body.id}. The team will review your plans and contact you. Your event is not yet confirmed or added to the calendar.`;
     form.reset(); updateSelections();
   } catch(error) {result.textContent = error.message === 'Failed to fetch' ? 'Connection interrupted. Please contact the facilities team before retrying to avoid a duplicate request.' : error.message;}
   finally {submit.disabled = false; submit.innerHTML = 'Send my request <span>↗</span>';result.focus();}

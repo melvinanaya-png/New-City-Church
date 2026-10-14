@@ -1,3 +1,4 @@
+import { ROOMS, approvalGroupsFor, approvalComplete } from './approvals.js';
 import { emailConfigured, sendMail } from './google-mail.js';
 import http from 'node:http';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
@@ -5,12 +6,11 @@ import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('.', import.meta.url));
 const dataDir = process.env.DATA_DIR || root + '.data/requests';
-// Temporary test approver. Restore Hope before accepting production requests.
-const recipients = ['melvin.anaya@newcitystc.church'];
 const approvedRecipients = ['facilities@newcitystc.church', 'mark.forbes@newcitystc.church'];
 const hash = value => createHash('sha256').update(value).digest('hex');
 const approving = new Set();
 export function validate(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return 'Invalid request.';
   const required = ['name', 'email', 'title', 'ministry', 'date', 'start', 'end'];
   for (const field of required) if (typeof data[field] !== 'string' || !data[field].trim() || data[field].length > 200) return `Please provide a valid ${field}.`;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) return 'Please enter a valid email address.';
@@ -19,7 +19,7 @@ export function validate(data) {
   if (!Number.isInteger(Number(data.guests)) || Number(data.guests) < 1 || Number(data.guests) > 5000) return 'Enter an attendance between 1 and 5,000.';
   if (typeof data.notes !== 'string' || data.notes.length > 4000) return 'Notes must be under 4,000 characters.';
   const groups = {
-    rooms: ['Worship Center', 'City Commons', 'Classrooms', 'Kitchen', 'Entire Building', 'Other'],
+    rooms: ROOMS,
     equipment: ['Sound Technician', 'TV Screens', 'Sound/Mixer', 'Microphones', 'TV/DVD', 'Other'],
     setup: ['Round Tables', 'Rectangular Tables', 'Chairs']
   };
@@ -55,40 +55,64 @@ export const server = http.createServer(async (req, res) => {
     if (path === '/api/approve' && req.method === 'POST') {
       let body = ''; for await (const chunk of req) {body += chunk; if(body.length > 2000) return json(res,413,{error:'Request too large.'});}
       let input; try {input = JSON.parse(body);} catch {return json(res,400,{error:'Invalid request.'});}
-      if (!/^[0-9a-f-]{36}$/.test(input.id || '') || !/^[0-9a-f]{64}$/.test(input.token || '')) return json(res,403,{error:'Invalid approval link.'});
-      const file = `${dataDir}/${input.id}.json`;
-      let record; try {record = JSON.parse(await readFile(file,'utf8'));} catch {return json(res,404,{error:'Request not found.'});}
-      if(record.tokenHash !== hash(input.token)) return json(res,403,{error:'Invalid approval link.'});
-      if(record.status === 'approved' && record.approvalNotification === 'sent') return json(res,200,{status:'approved'});
-      if(Date.now() > record.expiresAt) return json(res,410,{error:'This approval link has expired. Contact the site administrator.'});
-      if(approving.has(input.id)) return json(res,409,{error:'Approval is already processing. Please wait.'});
+      if (!/^[0-9a-f-]{36}$/.test(input?.id || '') || !/^[0-9a-f]{64}$/.test(input?.token || '')) return json(res,403,{error:'Invalid approval link.'});
+      if(approving.has(input.id)) return json(res,409,{error:'Approval is already processing. Please wait and try again.'});
       approving.add(input.id);
       try {
-        record.status = 'approved'; record.approvedAt ||= new Date().toISOString(); record.calendarStatus = 'pending-integration'; record.approvalNotification = 'pending';
+        const file = `${dataDir}/${input.id}.json`;
+        let record; try {record = JSON.parse(await readFile(file,'utf8'));} catch {return json(res,404,{error:'Request not found.'});}
+        // Preserve old single-approver test links when their records still exist.
+        if (!record.approvals) {
+          record.approvals = [{email:'melvin.anaya@newcitystc.church',tokenHash:record.tokenHash,approvedAt:null}];
+          record.approvalGroups = [{name:'Legacy test',approvers:['melvin.anaya@newcitystc.church']}];
+        }
+        const approver = record.approvals.find(approval => approval.tokenHash === hash(input.token));
+        if(!approver) return json(res,403,{error:'Invalid approval link.'});
+        if(record.status === 'approved' && record.approvalNotification === 'sent') return json(res,200,{status:'approved',calendarStatus:record.calendarStatus});
+        if(Date.now() > record.expiresAt) return json(res,410,{error:'This approval link has expired. Contact the site administrator.'});
+        approver.approvedAt ||= new Date().toISOString();
+        const complete = approvalComplete(record);
+        record.status = complete ? 'approved' : 'pending';
+        if (!complete) {
+          await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
+          return json(res,200,{status:'pending',remainingGroups:record.approvalGroups.filter(group => !group.approvers.some(email => record.approvals.some(a => a.email === email && a.approvedAt))).map(group => group.name)});
+        }
+        record.approvedAt ||= new Date().toISOString(); record.calendarStatus = 'manual-entry-required'; record.approvalNotification = 'pending';
         await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
-        const response = await sendMail(approvedRecipients, `Approved building request: ${record.title.replace(/[\r\n]/g,' ')}`, `Melvin approved this TEST building request.\n\nEvent: ${record.title}\nRequester: ${record.name} (${record.email})\nMinistry: ${record.ministry}\nDate: ${record.date}\nTime: ${record.start}–${record.end} Central Time\n${requestDetails(record)}\nAttendance: ${record.guests}\nNotes: ${record.notes}\nReference: ${record.id}\n\nPlanning Center integration is pending. Please add this approved event to the calendar manually.`, `approved-${record.id}`, record.email);
+        const approvedBy = record.approvals.filter(a => a.approvedAt).map(a => a.email).join(', ');
+        const response = await sendMail(approvedRecipients, `Approved building request: ${record.title.replace(/[\r\n]/g,' ')}`, `This building request has received all required room approvals.\nApproved by: ${approvedBy}\n\nEvent: ${record.title}\nRequester: ${record.name} (${record.email})\nMinistry: ${record.ministry}\nDate: ${record.date}\nTime: ${record.start}–${record.end} Central Time\n${requestDetails(record)}\nAttendance: ${record.guests}\nNotes: ${record.notes}\nReference: ${record.id}\n\nCALENDAR ACTION REQUIRED: Please add this approved event and its rooms to Planning Center Calendar manually. Planning Center's public Calendar API does not support creating events; this request has not been added automatically.`, `approved-${record.id}`, record.email);
         if(!response.ok) return json(res,502,{error:'Approval was saved, but notifications failed. Retry approval to resend the notifications.'});
         record.approvalNotification = 'sent'; await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
-        return json(res,200,{status:'approved'});
+        return json(res,200,{status:'approved',calendarStatus:record.calendarStatus});
       } finally {approving.delete(input.id);}
     }
     if (req.method === 'POST' && path === '/api/requests') {
       if (!emailConfigured()) return json(res, 503, {error: 'Email delivery has not been connected yet. Please contact facilities@newcitystc.church to submit your request.'});
       let body = ''; for await (const chunk of req) {body += chunk; if (body.length > 16000) return json(res, 413, {error: 'Request is too large.'});}
       let data; try {data = JSON.parse(body);} catch {return json(res, 400, {error: 'Invalid request.'});}
-      if (data.website) return json(res, 400, {error: 'Invalid request.'});
+      if (data?.website) return json(res, 400, {error: 'Invalid request.'});
       const error = validate(data); if (error) return json(res, 400, {error});
       const id = randomUUID();
-      const token = randomBytes(32).toString('hex');
-      const approvalUrl = `${process.env.PUBLIC_BASE_URL.replace(/\/$/, '')}/approval#id=${id}&token=${token}`;
-      const record = {id, tokenHash: hash(token), expiresAt: Date.now() + 14 * 86400000, ...Object.fromEntries(['name','email','title','ministry','date','start','end','guests','notes','rooms','roomsOther','equipment','equipmentOther','setup','quantities'].map(k => [k, data[k]])), status: 'pending', submittedAt: new Date().toISOString()};
+      const approvalGroups = approvalGroupsFor(data.rooms);
+      const tokens = [...new Set(approvalGroups.flatMap(group => group.approvers))].map(email => ({email,token:randomBytes(32).toString('hex')}));
+      const record = {id, approvalGroups, approvals:tokens.map(({email,token}) => ({email,tokenHash:hash(token),approvedAt:null,notification:'pending'})), expiresAt: Date.now() + 14 * 86400000, ...Object.fromEntries(['name','email','title','ministry','date','start','end','guests','notes','rooms','roomsOther','equipment','equipmentOther','setup','quantities'].map(k => [k, data[k]])), status: 'pending', submittedAt: new Date().toISOString()};
+      approving.add(id);
+      try {
       await mkdir(dataDir, {recursive: true});
-      await writeFile(`${dataDir}/${id}.json`, JSON.stringify({...record, notification: 'pending'}, null, 2), {mode: 0o600});
-      const message = `New building request — pending review\nReference: ${id}\n\nEvent: ${data.title}\nMinistry: ${data.ministry}\nRequester: ${data.name} (${data.email})\nDate: ${data.date}\nTime: ${data.start}–${data.end} America/Chicago\n${requestDetails(record)}\nAttendance: ${data.guests}\nNotes: ${data.notes || 'None'}\n\nMelvin (test approver): please review availability and approve using this private link (expires in 14 days): ${approvalUrl}\nDo not forward this link; anyone with it can approve. Approval notifies Darrell and Mark. This request has NOT been added to Planning Center Calendar.`;
-      const response = await sendMail(recipients, `Building request: ${data.title.replace(/[\r\n]/g,' ')}`, message, id, data.email);
-      if (!response.ok) { await writeFile(`${dataDir}/${id}.json`, JSON.stringify({...record, notification:'failed'},null,2), {mode:0o600}); return json(res, 502, {error:'Your request was saved, but the email could not be delivered. Please contact facilities@newcitystc.church with reference ' + id + '. Do not resubmit.'}); }
-      await writeFile(`${dataDir}/${id}.json`, JSON.stringify({...record, notification:'sent'},null,2), {mode:0o600});
+      const file = `${dataDir}/${id}.json`;
+      await writeFile(file, JSON.stringify(record, null, 2), {mode: 0o600});
+      for (const {email,token} of tokens) {
+        const approvalUrl = `${process.env.PUBLIC_BASE_URL.replace(/\/$/, '')}/approval#id=${id}&token=${token}`;
+        const routing = approvalGroups.map(group => `${group.name}: either ${group.approvers.join(' or ')}`).join('\n');
+        const message = `New building request — pending review\nReference: ${id}\n\nEvent: ${data.title}\nMinistry: ${data.ministry}\nRequester: ${data.name} (${data.email})\nDate: ${data.date}\nTime: ${data.start}–${data.end} America/Chicago\n${requestDetails(record)}\nAttendance: ${data.guests}\nNotes: ${data.notes || 'None'}\n\nApproval routing:\n${routing}\nOne approval from each applicable room group is required. Hope can approve every group.\n\nPlease review and approve with your private link (expires in 14 days): ${approvalUrl}\nDo not forward this link; anyone with it can approve your room group(s). Once all room groups are approved, Darrell and Mark are notified. Calendar entry remains manual because Planning Center's public API does not support event creation.`;
+        let delivered = false;
+        try {delivered = (await sendMail([email], `Building request: ${data.title.replace(/[\r\n]/g,' ')}`, message, `${id}-${record.approvals.findIndex(a => a.email === email)}`, data.email)).ok;} catch { /* Preserve the request and report uncertain delivery without automatic retries. */ }
+        record.approvals.find(a => a.email === email).notification = delivered ? 'sent' : 'failed-or-uncertain';
+        await writeFile(file, JSON.stringify(record, null, 2), {mode:0o600});
+      }
+      if (record.approvals.some(a => a.notification !== 'sent')) return json(res,502,{error:`Your request was saved, but some approval emails could not be confirmed. Contact facilities@newcitystc.church with reference ${id}. Do not resubmit.`});
       return json(res, 201, {id,status:'pending'});
+      } finally {approving.delete(id);}
     }
     const files = {'/':'index.html','/styles.css':'styles.css','/app.js':'app.js','/approval.js':'approval.js','/assets/new-city-logo.png':'assets/new-city-logo.png','/assets/fonts/Barlow-Regular.ttf':'assets/fonts/Barlow-Regular.ttf','/assets/fonts/Barlow-Medium.ttf':'assets/fonts/Barlow-Medium.ttf','/assets/fonts/BarlowCondensed-SemiBold.ttf':'assets/fonts/BarlowCondensed-SemiBold.ttf'};
     if (req.method !== 'GET' || !files[path]) return json(res, 404, {error:'Not found'});
