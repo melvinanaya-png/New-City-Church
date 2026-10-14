@@ -32,12 +32,12 @@ test('serves page and does not claim email delivery without credentials', async 
   assert.match(await (await fetch(base)).text(), /Make room for/);
   assert.equal((await post('/api/requests',request)).status,503);
 });
-test('Hope receives approval link; only approval notifies Darrell and Mark; replay is idempotent', async () => {
+test('Melvin receives the test approval link; only approval notifies Darrell and Mark; replay is idempotent', async () => {
   process.env.GOOGLE_CLIENT_ID='test-client'; process.env.GOOGLE_CLIENT_SECRET='test-secret'; process.env.GOOGLE_REFRESH_TOKEN='test-refresh'; process.env.PUBLIC_BASE_URL = base;
   const response = await post('/api/requests',request);
   assert.equal(response.status,201);
   const {id} = await response.json();
-  assert.deepEqual(messages[0].to,['Hope.varwig@newcitystc.church']);
+  assert.deepEqual(messages[0].to,['melvin.anaya@newcitystc.church']);
   assert.equal(messages[0].from,'New City Church <melvin.anaya@newcitystc.church>');
   assert.equal(messages.length,1);
   const token = messages[0].text.match(/token=([a-f0-9]{64})/)[1];

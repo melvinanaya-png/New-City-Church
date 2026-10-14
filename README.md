@@ -15,8 +15,8 @@ The app runs on port 3000 (`PORT` overrides it). `npm run dev` restarts on edits
 ## Workflow
 
 1. A visitor supplies event, contact, space, and setup details.
-2. The request is saved locally and emailed **only to Hope.varwig@newcitystc.church**.
-3. Hope uses the private, 14-day approval link in the email and explicitly approves. Opening the link alone does not approve anything.
+2. The request is saved locally and emailed **only to melvin.anaya@newcitystc.church during testing**.
+3. Melvin uses the private, 14-day approval link in the email and explicitly approves. Opening the link alone does not approve anything.
 4. Approval emails **facilities@newcitystc.church (Darrell Bearce)** and **mark.forbes@newcitystc.church (Mark Forbes)**. Retrying a completed approval does not resend notifications.
 5. Calendar creation is currently manual. The emails and UI explicitly say that Planning Center is not connected.
 
@@ -24,7 +24,7 @@ Approval links are bearer credentials; do not forward them. Their tokens are sto
 
 ## Google Workspace email configuration
 
-During testing, all emails are sent as **melvin.anaya@newcitystc.church** through the Gmail API. Melvin must authorize this app using his church Google account. Hope remains the approver. Before switching the sender to Hope, she must authorize her account and the sender and refresh token must be updated together. Resend is no longer used. Selecting an email address does not establish authorization.
+During testing, all emails are sent as **melvin.anaya@newcitystc.church** through the Gmail API. Melvin must authorize this app using his church Google account. Melvin is temporarily the test approver. Restore Hope as the approval recipient and update the test-mode wording before accepting real requests. Before switching the sender to Hope, she must authorize her account and the sender and refresh token must be updated together. Resend is no longer used. Selecting an email address does not establish authorization.
 
 A Google Workspace / Google Cloud administrator should:
 

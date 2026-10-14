@@ -5,7 +5,8 @@ import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('.', import.meta.url));
 const dataDir = process.env.DATA_DIR || root + '.data/requests';
-const recipients = ['Hope.varwig@newcitystc.church'];
+// Temporary test approver. Restore Hope before accepting production requests.
+const recipients = ['melvin.anaya@newcitystc.church'];
 const approvedRecipients = ['facilities@newcitystc.church', 'mark.forbes@newcitystc.church'];
 const hash = value => createHash('sha256').update(value).digest('hex');
 const approving = new Set();
@@ -43,7 +44,7 @@ export const server = http.createServer(async (req, res) => {
       try {
         record.status = 'approved'; record.approvedAt ||= new Date().toISOString(); record.calendarStatus = 'pending-integration'; record.approvalNotification = 'pending';
         await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
-        const response = await sendMail(approvedRecipients, `Approved building request: ${record.title.replace(/[\r\n]/g,' ')}`, `Hope approved this building request.\n\nEvent: ${record.title}\nRequester: ${record.name} (${record.email})\nMinistry: ${record.ministry}\nDate: ${record.date}\nTime: ${record.start}–${record.end} Central Time\nSpace: ${record.space}\nAttendance: ${record.guests}\nSetup: ${record.needs.join(', ')}\nNotes: ${record.notes}\nReference: ${record.id}\n\nPlanning Center integration is pending. Please add this approved event to the calendar manually.`, `approved-${record.id}`, record.email);
+        const response = await sendMail(approvedRecipients, `Approved building request: ${record.title.replace(/[\r\n]/g,' ')}`, `Melvin approved this TEST building request.\n\nEvent: ${record.title}\nRequester: ${record.name} (${record.email})\nMinistry: ${record.ministry}\nDate: ${record.date}\nTime: ${record.start}–${record.end} Central Time\nSpace: ${record.space}\nAttendance: ${record.guests}\nSetup: ${record.needs.join(', ')}\nNotes: ${record.notes}\nReference: ${record.id}\n\nPlanning Center integration is pending. Please add this approved event to the calendar manually.`, `approved-${record.id}`, record.email);
         if(!response.ok) return json(res,502,{error:'Approval was saved, but notifications failed. Retry approval to resend the notifications.'});
         record.approvalNotification = 'sent'; await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
         return json(res,200,{status:'approved'});
@@ -61,7 +62,7 @@ export const server = http.createServer(async (req, res) => {
       const record = {id, tokenHash: hash(token), expiresAt: Date.now() + 14 * 86400000, ...Object.fromEntries(['name','email','title','ministry','date','start','end','space','guests','notes','needs'].map(k => [k, data[k]])), status: 'pending', submittedAt: new Date().toISOString()};
       await mkdir(dataDir, {recursive: true});
       await writeFile(`${dataDir}/${id}.json`, JSON.stringify({...record, notification: 'pending'}, null, 2), {mode: 0o600});
-      const message = `New building request — pending review\nReference: ${id}\n\nEvent: ${data.title}\nMinistry: ${data.ministry}\nRequester: ${data.name} (${data.email})\nDate: ${data.date}\nTime: ${data.start}–${data.end} America/Chicago\nSpace: ${data.space}\nAttendance: ${data.guests}\nSetup: ${data.needs.join(', ') || 'None'}\nNotes: ${data.notes || 'None'}\n\nHope: please review availability and approve using this private link (expires in 14 days): ${approvalUrl}\nDo not forward this link; anyone with it can approve. Approval notifies Darrell and Mark. This request has NOT been added to Planning Center Calendar.`;
+      const message = `New building request — pending review\nReference: ${id}\n\nEvent: ${data.title}\nMinistry: ${data.ministry}\nRequester: ${data.name} (${data.email})\nDate: ${data.date}\nTime: ${data.start}–${data.end} America/Chicago\nSpace: ${data.space}\nAttendance: ${data.guests}\nSetup: ${data.needs.join(', ') || 'None'}\nNotes: ${data.notes || 'None'}\n\nMelvin (test approver): please review availability and approve using this private link (expires in 14 days): ${approvalUrl}\nDo not forward this link; anyone with it can approve. Approval notifies Darrell and Mark. This request has NOT been added to Planning Center Calendar.`;
       const response = await sendMail(recipients, `Building request: ${data.title.replace(/[\r\n]/g,' ')}`, message, id, data.email);
       if (!response.ok) { await writeFile(`${dataDir}/${id}.json`, JSON.stringify({...record, notification:'failed'},null,2), {mode:0o600}); return json(res, 502, {error:'Your request was saved, but the email could not be delivered. Please contact facilities@newcitystc.church with reference ' + id + '. Do not resubmit.'}); }
       await writeFile(`${dataDir}/${id}.json`, JSON.stringify({...record, notification:'sent'},null,2), {mode:0o600});
