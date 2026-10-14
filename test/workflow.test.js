@@ -7,7 +7,7 @@ const dir = await mkdtemp(join(tmpdir(), 'newcity-tests-'));
 process.env.DATA_DIR = dir;
 delete process.env.GOOGLE_CLIENT_ID; delete process.env.GOOGLE_CLIENT_SECRET; delete process.env.GOOGLE_REFRESH_TOKEN;
 const {server, validate} = await import('../server.js');
-const request = {name:'Test Person',email:'person@example.com',title:'Community dinner',ministry:'Community',date:'2026-12-12',start:'17:00',end:'19:00',space:'Meeting room',guests:25,notes:'Accessible seating',needs:['Tables & chairs'],agree:true};
+const request = {name:'Test Person',email:'person@example.com',title:'Community dinner',ministry:'Community',date:'2026-12-12',start:'17:00',end:'19:00',rooms:['City Commons','Kitchen'],roomsOther:'',equipment:['Sound Technician','Microphones'],equipmentOther:'',setup:['Round Tables','Chairs'],quantities:{roundTables:5,chairs:25},guests:25,notes:'Accessible seating',agree:true};
 await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 const realFetch = globalThis.fetch;
@@ -27,9 +27,14 @@ test('request validation rejects invalid time and email', () => {
   assert.equal(validate(request), undefined);
   assert.match(validate({...request,end:'16:00'}), /End time/);
   assert.match(validate({...request,email:'bad'}), /email/);
+  for (const group of ['rooms','equipment','setup']) assert.match(validate({...request,[group]:[]}), /Select at least one/);
+  assert.match(validate({...request,quantities:{roundTables:0,chairs:25}}), /quantity/);
+  assert.match(validate({...request,rooms:['Other'],roomsOther:''}), /specify other rooms/);
+  assert.match(validate({...request,agree:false}), /acknowledge/);
+  assert.equal(validate({...request,setup:['Rectangular Tables'],quantities:{rectangularTables:3}}), undefined);
 });
 test('serves page and does not claim email delivery without credentials', async () => {
-  assert.match(await (await fetch(base)).text(), /Make room for/);
+  assert.match(await (await fetch(base)).text(), /MAKE ROOM FOR/);
   assert.equal((await post('/api/requests',request)).status,503);
 });
 test('Melvin receives the test approval link; only approval notifies Darrell and Mark; replay is idempotent', async () => {
@@ -40,9 +45,13 @@ test('Melvin receives the test approval link; only approval notifies Darrell and
   assert.deepEqual(messages[0].to,['melvin.anaya@newcitystc.church']);
   assert.equal(messages[0].from,'New City Church <melvin.anaya@newcitystc.church>');
   assert.equal(messages.length,1);
+  assert.match(messages[0].text,/Rooms: City Commons, Kitchen/);
+  assert.match(messages[0].text,/Equipment: Sound Technician, Microphones/);
+  assert.match(messages[0].text,/Round Tables: 5, Chairs: 25/);
   const token = messages[0].text.match(/token=([a-f0-9]{64})/)[1];
   assert.equal((await post('/api/approve',{id,token:'0'.repeat(64)})).status,403);
   assert.equal((await post('/api/approve',{id,token})).status,200);
+  assert.match(messages[1].text,/Round Tables: 5, Chairs: 25/);
   assert.deepEqual(messages[1].to,['facilities@newcitystc.church','mark.forbes@newcitystc.church']);
   assert.equal((await post('/api/approve',{id,token})).status,200);
   assert.equal(messages.length,2);
