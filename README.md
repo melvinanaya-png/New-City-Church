@@ -24,17 +24,17 @@ Approval links are bearer credentials; do not forward them. Their tokens are sto
 
 ## Google Workspace email configuration
 
-All emails are sent as **hope.varwig@newcitystc.church** through the Gmail API. Resend is no longer used. Hope must authorize this app to send from her Google Workspace account; selecting her email address does not establish authorization.
+During testing, all emails are sent as **melvin.anaya@newcitystc.church** through the Gmail API. Melvin must authorize this app using his church Google account. Hope remains the approver. Before switching the sender to Hope, she must authorize her account and the sender and refresh token must be updated together. Resend is no longer used. Selecting an email address does not establish authorization.
 
 A Google Workspace / Google Cloud administrator should:
 
 1. Create a Google Cloud project, enable the Gmail API, and configure an Internal OAuth consent audience for the church's Workspace organization where available.
 2. Create a server-side Web Application OAuth client. Register the actual authorization callback URL of the tool used for setup; the request app does not currently host an OAuth callback.
-3. Obtain an offline refresh token by having Hope sign in and explicitly grant the `https://www.googleapis.com/auth/gmail.send` scope through a trusted OAuth authorization flow. Do not use Hope's regular Google password. External apps left in testing may have short-lived refresh tokens; configure the app's appropriate production/internal status with the administrator.
+3. Obtain an offline refresh token by having Melvin sign in for testing (Hope when switching the sender) and explicitly grant the `https://www.googleapis.com/auth/gmail.send` scope through a trusted OAuth authorization flow. Do not use anyone's regular Google password. External apps left in testing may have short-lived refresh tokens; configure the app's appropriate production/internal status with the administrator.
 4. Store `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN` securely in environment settings. Do not commit these values or paste them in chat. The cloud configuration declares secret requirements, not values.
 5. Set `PUBLIC_BASE_URL` to the actual HTTPS origin serving this app. It must not point to the existing church website unless this app is deployed there.
 
-`MAIL_FROM` is no longer read: Hope's sender address is fixed in the app. Remove the obsolete `RESEND_API_KEY` and `MAIL_FROM` requirements in the configuration review UI. Google OAuth token refresh and Gmail send are implemented, but live delivery has not been verified without credentials. Tests mock both Google endpoints and send no real email. Gmail does not promise idempotency based on Message-ID; after an ambiguous network interruption, check Hope's Sent folder before retrying.
+`MAIL_FROM` is no longer read: Melvin's test sender address is fixed in the app. Remove the obsolete `RESEND_API_KEY` and `MAIL_FROM` requirements in the configuration review UI. Google OAuth token refresh and Gmail send are implemented, but live delivery has not been verified without credentials. Tests mock both Google endpoints and send no real email. Gmail does not promise idempotency based on Message-ID; after an ambiguous network interruption, check the authorized sender's Sent folder before retrying.
 
 `DATA_DIR` optionally sets a persistent private request directory; default is `.data/requests` in the checkout. Retain records across restarts. No records are publicly served. Without Google configuration, visitors see preview mode and submitting returns an honest unavailable message.
 

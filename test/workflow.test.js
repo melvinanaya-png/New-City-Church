@@ -38,7 +38,7 @@ test('Hope receives approval link; only approval notifies Darrell and Mark; repl
   assert.equal(response.status,201);
   const {id} = await response.json();
   assert.deepEqual(messages[0].to,['Hope.varwig@newcitystc.church']);
-  assert.equal(messages[0].from,'New City Church <hope.varwig@newcitystc.church>');
+  assert.equal(messages[0].from,'New City Church <melvin.anaya@newcitystc.church>');
   assert.equal(messages.length,1);
   const token = messages[0].text.match(/token=([a-f0-9]{64})/)[1];
   assert.equal((await post('/api/approve',{id,token:'0'.repeat(64)})).status,403);

@@ -1,5 +1,5 @@
 // Gmail API with server-side OAuth refresh; credentials are never sent to browsers.
-export const sender = 'hope.varwig@newcitystc.church';
+export const sender = 'melvin.anaya@newcitystc.church';
 export function emailConfigured() {
   return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REFRESH_TOKEN && process.env.PUBLIC_BASE_URL);
 }
