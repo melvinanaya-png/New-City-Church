@@ -50,7 +50,7 @@ export async function createApprovedEvent(record, details) {
     location:record.rooms?.join(', ') || record.space,
     start:{dateTime:`${record.date}T${record.start}:00`,timeZone:'America/Chicago'},
     end:{dateTime:`${record.date}T${record.end}:00`,timeZone:'America/Chicago'},
-    extendedProperties:{private:{newCityRequestId:record.id}},
+    extendedProperties:{private:{newCityRequestId:record.id,newCityRooms:JSON.stringify(record.rooms || [record.space])}},
     ...(record.recurrence ? {recurrence:[recurrenceRule(record.date,record.recurrence)]} : {}),
     reminders:{useDefault:false}
   };

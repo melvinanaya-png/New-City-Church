@@ -1,3 +1,4 @@
+import { checkAvailability, validateSchedule } from './availability.js';
 import { validateRecurrence, recurrenceSummary } from './recurrence.js';
 import { calendarConfigured, createApprovedEvent, checkCalendarAccess } from './google-calendar.js';
 import { approvalEmailHtml } from './approval-email.js';
@@ -12,6 +13,17 @@ const dataDir = process.env.DATA_DIR || root + '.data/requests';
 const approvedRecipients = ['facilities@newcitystc.church', 'mark.forbes@newcitystc.church', 'DaijaO2006@gmail.com'];
 const hash = value => createHash('sha256').update(value).digest('hex');
 const approving = new Set();
+let bookingQueue = Promise.resolve();
+function acquireBookingLock() {
+  const previous=bookingQueue; let release;
+  bookingQueue=new Promise(resolve=>{release=resolve;});
+  return previous.then(()=>release);
+}
+function availabilityFailure(res, result) {
+  if(!result.ok) {json(res,503,{error:result.error});return true;}
+  if(result.conflicts.length) {json(res,409,{error:'Booking blocked: '+result.conflicts.map(c=>`${c.room} is already booked on ${c.firstConflictDate}${c.occurrences>1 ? ` (${c.occurrences} dates in the series)` : ''}`).join('; ')+'. Choose different rooms or dates.',conflicts:result.conflicts});return true;}
+  return false;
+}
 export function validate(data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return 'Invalid request.';
   const required = ['name', 'email', 'title', 'ministry', 'date', 'start', 'end'];
@@ -53,6 +65,13 @@ export const server = http.createServer(async (req, res) => {
   try {
     const path = new URL(req.url, 'http://localhost').pathname;
     if (req.method === 'GET' && path === '/api/status') return json(res, 200, {emailConfigured: emailConfigured(), calendarConfigured: calendarConfigured()});
+    if (path === '/api/availability' && req.method === 'POST') {
+      let body=''; for await(const chunk of req) {body+=chunk;if(body.length>4000)return json(res,413,{error:'Request too large.'});}
+      let data;try{data=JSON.parse(body);}catch{return json(res,400,{error:'Invalid request.'});}
+      const error=validateSchedule(data);if(error)return json(res,400,{error});
+      const result=await checkAvailability({date:data.date,start:data.start,end:data.end,recurrence:data.recurrence,rooms:ROOMS});
+      return json(res,result.ok?200:503,result.ok?{conflicts:result.conflicts}:{error:result.error});
+    }
     if (path === '/approval' && req.method === 'GET') {
       res.writeHead(200, {'Content-Type':'text/html','Referrer-Policy':'no-referrer','Cache-Control':'no-store','Content-Security-Policy':"default-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'"});
       return res.end(await readFile(root + 'public/approval.html'));
@@ -63,6 +82,7 @@ export const server = http.createServer(async (req, res) => {
       if (!/^[0-9a-f-]{36}$/.test(input?.id || '') || !/^[0-9a-f]{64}$/.test(input?.token || '')) return json(res,403,{error:'Invalid approval link.'});
       if(approving.has(input.id)) return json(res,409,{error:'Approval is already processing. Please wait and try again.'});
       approving.add(input.id);
+      const releaseBookingLock=await acquireBookingLock();
       try {
         const file = `${dataDir}/${input.id}.json`;
         let record; try {record = JSON.parse(await readFile(file,'utf8'));} catch {return json(res,404,{error:'Request not found.'});}
@@ -82,6 +102,7 @@ export const server = http.createServer(async (req, res) => {
           await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
           return json(res,200,{status:'pending',remainingGroups:record.approvalGroups.filter(group => !group.approvers.some(email => record.approvals.some(a => a.email === email && a.approvedAt))).map(group => group.name)});
         }
+        if(record.calendarStatus !== 'created' && availabilityFailure(res,await checkAvailability(record))) return;
         record.approvedAt ||= new Date().toISOString();
         record.calendarTargetId ||= process.env.GOOGLE_CALENDAR_ID;
         await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
@@ -101,7 +122,7 @@ export const server = http.createServer(async (req, res) => {
         if(!response.ok) return json(res,502,{error:'Approval was saved, but notifications failed. Retry approval to resend the notifications.'});
         record.approvalNotification = 'sent'; await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
         return json(res,200,{status:'approved',calendarStatus:record.calendarStatus,calendarError:record.calendarError});
-      } finally {approving.delete(input.id);}
+      } finally {releaseBookingLock();approving.delete(input.id);}
     }
     if (req.method === 'POST' && path === '/api/requests') {
       if (!emailConfigured()) return json(res, 503, {error: 'Email delivery has not been connected yet. Please contact facilities@newcitystc.church to submit your request.'});
@@ -109,6 +130,7 @@ export const server = http.createServer(async (req, res) => {
       let data; try {data = JSON.parse(body);} catch {return json(res, 400, {error: 'Invalid request.'});}
       if (data?.website) return json(res, 400, {error: 'Invalid request.'});
       const error = validate(data); if (error) return json(res, 400, {error});
+      if(availabilityFailure(res,await checkAvailability({...data,id:undefined,calendarTargetId:undefined})))return;
       const id = randomUUID();
       const approvalGroups = approvalGroupsFor(data.rooms);
       const tokens = [...new Set(approvalGroups.flatMap(group => group.approvers))].map(email => ({email,token:randomBytes(32).toString('hex')}));

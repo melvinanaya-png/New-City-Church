@@ -17,8 +17,17 @@ const messages = [];
 const calendarEvents = new Map();
 let calendarFailure = false;
 let calendarInserts = 0;
+let availabilityEvents = [];
+let availabilityFailure = false;
+let includeCreatedBookings = false;
+let availabilityPages = null;
 globalThis.fetch = (url, options) => {
   if(String(url).startsWith('https://www.googleapis.com/calendar/v3/')) {
+    if(String(url).includes('singleEvents=true')) {
+      if(availabilityFailure)return Promise.resolve(new Response('{}',{status:503}));
+      if(availabilityPages) {const page=new URL(String(url)).searchParams.get('pageToken');return Promise.resolve(new Response(JSON.stringify(availabilityPages[page?1:0]),{status:200}));}
+      return Promise.resolve(new Response(JSON.stringify({items:[...availabilityEvents,...(includeCreatedBookings?[...calendarEvents.values()]:[])]}),{status:200}));
+    }
     if(calendarFailure) return Promise.resolve(new Response('{}',{status:403}));
     if(options.method === 'POST') {
       calendarInserts++;
@@ -64,7 +73,7 @@ test('serves page and does not claim email delivery without credentials', async 
   assert.equal((await post('/api/requests',request)).status,503);
 });
 test('Hope receives common-room requests; approval notifies Darrell, Mark and Daija once', async () => {
-  process.env.GOOGLE_CLIENT_ID='test-client'; process.env.GOOGLE_CLIENT_SECRET='test-secret'; process.env.GOOGLE_REFRESH_TOKEN='test-refresh'; process.env.PUBLIC_BASE_URL = base;
+  process.env.GOOGLE_CALENDAR_ID='test-calendar@group.calendar.google.com'; process.env.GOOGLE_CLIENT_ID='test-client'; process.env.GOOGLE_CLIENT_SECRET='test-secret'; process.env.GOOGLE_REFRESH_TOKEN='test-refresh'; process.env.PUBLIC_BASE_URL = base;
   const response = await post('/api/requests',request);
   assert.equal(response.status,201);
   const {id} = await response.json();
@@ -117,7 +126,7 @@ test('mixed classroom and worship request waits for coverage of both room groups
   assert.deepEqual(messages.at(-1).to,['facilities@newcitystc.church','mark.forbes@newcitystc.church','DaijaO2006@gmail.com']);
   assert.match(messages.at(-1).text,/milyn.farrier@/);
   assert.match(messages.at(-1).text,/melvin.anaya@/);
-  assert.match(messages.at(-1).text,/CALENDAR ACTION REQUIRED/);
+  assert.match(messages.at(-1).text,/Added to the shared/);
   const hope=approvals.find(m=>m.to[0].startsWith('hope.'));
   await post('/api/approve',{id,token:tokenFrom(hope)});
   assert.equal(messages.length,before+4,'late approval does not resend final notifications');
@@ -275,5 +284,66 @@ test('every-other-Wednesday series is emailed and created only after approval wi
   const inserts=calendarInserts, sent=messages.length;
   await post('/api/approve',{id,token});
   assert.equal(calendarInserts,inserts);assert.equal(messages.length,sent);
+});
+const busy = (rooms,start='2026-12-12T17:30:00-06:00',end='2026-12-12T18:30:00-06:00') => ({id:'busy',status:'confirmed',start:{dateTime:start},end:{dateTime:end},extendedProperties:{private:{newCityRooms:JSON.stringify(rooms)}}});
+test('overlap checks handle room separation, adjacent times, building holds, all-day and manual events', async () => {
+  const {findConflicts}=await import('../availability.js');
+  assert.equal(findConflicts(request,[busy(['Kitchen'])])[0].room,'Kitchen');
+  assert.deepEqual(findConflicts(request,[busy(['Nursery'])]),[]);
+  assert.deepEqual(findConflicts(request,[busy(['Kitchen'],'2026-12-12T19:00:00-06:00','2026-12-12T20:00:00-06:00')]),[]);
+  assert.equal(findConflicts(request,[busy(['Entire Building'])]).length,1);
+  assert.equal(findConflicts({...request,rooms:['Entire Building']},[busy(['Nursery'])]).length,1);
+  assert.deepEqual(findConflicts(request,[{...busy(['Kitchen']),transparency:'transparent'}]),[]);
+  assert.deepEqual(findConflicts(request,[{...busy(['Kitchen']),status:'cancelled'}]),[]);
+  assert.equal(findConflicts(request,[{start:{date:'2026-12-12'},end:{date:'2026-12-13'},location:'Kitchen'}]).length,1);
+  assert.equal(findConflicts(request,[{start:{dateTime:'2026-12-12T17:00:00-06:00'},end:{dateTime:'2026-12-12T18:00:00-06:00'}}]).length,1,'unlabelled busy events block conservatively');
+});
+test('series availability expands biweekly and monthly dates across DST', async () => {
+  const {scheduleWindows,findConflicts}=await import('../availability.js');
+  const data={...request,date:'2026-10-21',recurrence:{frequency:'weekly',interval:2,count:3}};
+  const windows=scheduleWindows(data);
+  assert.deepEqual(windows.map(w=>w.date),['2026-10-21','2026-11-04','2026-11-18']);
+  assert.equal(new Date(windows[0].start).toISOString(),'2026-10-21T22:00:00.000Z');
+  assert.equal(new Date(windows[1].start).toISOString(),'2026-11-04T23:00:00.000Z');
+  assert.equal(findConflicts(data,[busy(['Kitchen'],'2026-11-04T17:30:00-06:00','2026-11-04T18:30:00-06:00')])[0].firstConflictDate,'2026-11-04');
+  assert.deepEqual(scheduleWindows({...request,date:'2026-01-31',recurrence:{frequency:'monthly',interval:1,count:3}}).map(w=>w.date),['2026-01-31','2026-03-31','2026-05-31']);
+});
+test('submission blocks booked rooms without sending emails and availability reveals no event details', async () => {
+  availabilityEvents=[{...busy(['Kitchen']),summary:'Private meeting',description:'Private notes'}];
+  const before=messages.length;
+  let response=await post('/api/requests',request);assert.equal(response.status,409);assert.equal(messages.length,before);
+  response=await post('/api/availability',{date:request.date,start:request.start,end:request.end});
+  assert.equal(response.status,200);const text=await response.text();assert.match(text,/Kitchen/);assert.ok(!text.includes('Private'));
+  availabilityEvents=[];
+});
+test('final approval blocks a booking made since submission', async () => {
+  const before=messages.length;
+  const {id}=await (await post('/api/requests',request)).json();const token=tokenFrom(messages[before]);
+  availabilityEvents=[busy(['Kitchen'])];
+  const inserts=calendarInserts,sent=messages.length;
+  const response=await post('/api/approve',{id,token});assert.equal(response.status,409);
+  assert.equal(calendarInserts,inserts);assert.equal(messages.length,sent);
+  availabilityEvents=[];
+});
+test('availability failure blocks submissions instead of claiming rooms are free', async () => {
+  availabilityFailure=true;
+  const before=messages.length;
+  assert.equal((await post('/api/requests',request)).status,503);assert.equal(messages.length,before);
+  availabilityFailure=false;
+});
+test('two pending requests cannot both book the same room through concurrent final approvals', async () => {
+  const make=async()=>{const before=messages.length;const {id}=await (await post('/api/requests',{...request,date:'2027-05-12'})).json();return {id,token:tokenFrom(messages[before])};};
+  const first=await make(),second=await make();
+  includeCreatedBookings=true;
+  const responses=await Promise.all([post('/api/approve',first),post('/api/approve',second)]);
+  assert.deepEqual(responses.map(r=>r.status).sort(),[200,409]);
+  includeCreatedBookings=false;
+});
+test('availability reads later calendar pages and cannot be bypassed by a submitted request ID', async () => {
+  availabilityPages=[{items:[],nextPageToken:'second-page'},{items:[{...busy(['Kitchen']),extendedProperties:{private:{newCityRequestId:'pretend-own-id',newCityRooms:'["Kitchen"]'}}}]}];
+  const before=messages.length;
+  const response=await post('/api/requests',{...request,id:'pretend-own-id'});
+  assert.equal(response.status,409);assert.equal(messages.length,before);
+  availabilityPages=null;
 });
 test.after(async () => {globalThis.fetch=realFetch;await new Promise(resolve => server.close(resolve)); await rm(dir,{recursive:true,force:true});});
