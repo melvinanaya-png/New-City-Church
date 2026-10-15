@@ -12,3 +12,8 @@ export function approvalGroupsFor(rooms) {
 export function approvalComplete(record) {
   return record.approvalGroups.every(group => group.approvers.some(email => record.approvals.some(approval => approval.email === email && approval.approvedAt)));
 }
+
+export const AV_CONTACT = 'melvin.anaya@newcitystc.church';
+export function needsAvNotification(equipment) {
+  return equipment.some(item => ['Sound Technician','TV Screens','Sound/Mixer','Microphones','TV/DVD'].includes(item));
+}

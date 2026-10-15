@@ -78,3 +78,15 @@ Automatic creation is unavailable through the documented public Calendar API. Th
 Before building any alternative calendar automation, confirm a supported creation method with Planning Center. Do not use private endpoints or browser automation with shared account passwords as a substitute.
 
 The prior form at https://newcitystc.church/new-page returned HTTP 403 during initial setup. Fields and room names now follow the user's provided requirements. This app is deployed separately on Render, not published into Squarespace.
+
+## AV request notifications
+
+Selecting Sound Technician, TV Screens, Sound/Mixer, Microphones or TV/DVD notifies `melvin.anaya@newcitystc.church` immediately when submitted. If Melvin is already an assigned room approver, his approval email doubles as the AV notice and its subject is marked accordingly. Otherwise, he gets a separate informational email with no approval token; this does not grant him permission to approve another team's rooms. Final approvals still notify Darrell, Mark and Daija. Calendar creation waits for room approval as before.
+
+## Squarespace placement
+
+The app can be embedded only on `https://newcitystc.church` and `https://www.newcitystc.church` (and its own origin). Approval pages remain unframeable. The form-only URL is `https://new-city-building-requests.onrender.com/?embed=1`.
+
+On the Squarespace page `/new-page`, enter Edit mode and add a Code Block in HTML mode. Paste `docs/squarespace-embed.html`. The optional script sizes the iframe using messages checked against the app's exact origin and iframe window. If JavaScript is unavailable, the fixed-height iframe remains scrollable. If the Squarespace plan disallows iframes, use a Button Block linking to the full app instead. Preview on mobile and desktop before replacing the old form. The app's embedded view hides duplicate navigation and the introductory panel but retains the New City logo and full form.
+
+The repository update does not edit or publish Squarespace. The user must apply the block with their Squarespace account. Durable storage is still required before opening the page for real requests; Render Free can lose approval records on restarts/deployments.

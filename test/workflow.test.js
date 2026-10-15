@@ -9,7 +9,7 @@ delete process.env.GOOGLE_CALENDAR_ID;
 delete process.env.GOOGLE_CLIENT_ID; delete process.env.GOOGLE_CLIENT_SECRET; delete process.env.GOOGLE_REFRESH_TOKEN;
 const {approvalGroupsFor} = await import('../approvals.js');
 const {server, validate} = await import('../server.js');
-const request = {name:'Test Person',email:'person@example.com',title:'Community dinner',ministry:'Community',date:'2026-12-12',start:'17:00',end:'19:00',rooms:['Kitchen'],roomsOther:'',equipment:['Sound Technician','Microphones'],equipmentOther:'',setup:['Round Tables','Chairs'],quantities:{roundTables:5,chairs:25},guests:25,notes:'Accessible seating',agree:true};
+const request = {name:'Test Person',email:'person@example.com',title:'Community dinner',ministry:'Community',date:'2026-12-12',start:'17:00',end:'19:00',rooms:['Kitchen'],roomsOther:'',equipment:['Other'],equipmentOther:'Whiteboard',setup:['Round Tables','Chairs'],quantities:{roundTables:5,chairs:25},guests:25,notes:'Accessible seating',agree:true};
 await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 const realFetch = globalThis.fetch;
@@ -76,7 +76,7 @@ test('Hope receives common-room requests; approval notifies Darrell, Mark and Da
   assert.ok(messages[0].html.includes(tokenFrom(messages[0])));
   assert.match(messages[0].html,/clicking the button alone does not approve/);
   assert.match(messages[0].text,/Rooms: Kitchen/);
-  assert.match(messages[0].text,/Equipment: Sound Technician, Microphones/);
+  assert.match(messages[0].text,/Equipment: Other \(Whiteboard\)/);
   assert.match(messages[0].text,/Round Tables: 5, Chairs: 25/);
   const token = messages[0].text.match(/token=([a-f0-9]{64})/)[1];
   assert.equal((await post('/api/approve',{id,token:'0'.repeat(64)})).status,403);
@@ -215,5 +215,35 @@ test('setup is optional but quantities remain required for selected items', () =
   assert.match(validate({...request,setup:['Chairs'],quantities:{}}),/quantity/);
   assert.match(validate({...request,setup:['Round Tables'],quantities:{roundTables:1.5}}),/quantity/);
   assert.equal(validate({...request,setup:['Chairs'],quantities:{chairs:20}}),undefined);
+});
+test('AV selections notify Melvin on submission without granting unrelated room approval', async () => {
+  for (const equipment of ['Sound Technician','TV Screens','Sound/Mixer','Microphones','TV/DVD']) {
+    const before=messages.length;
+    const response=await post('/api/requests',{...request,rooms:['Kitchen'],equipment:[equipment],equipmentOther:''});
+    assert.equal(response.status,201);
+    const emails=messages.slice(before);
+    assert.equal(emails.length,2);
+    const notice=emails.find(message=>message.to[0]==='melvin.anaya@newcitystc.church');
+    assert.ok(notice);assert.ok(notice.text.includes(equipment));
+    assert.match(notice.text,/not a confirmed booking or an approval assignment/);
+    assert.ok(!notice.text.includes('token='));
+  }
+});
+test('Melvin receives one email when he is both Worship Center approver and AV contact', async () => {
+  const before=messages.length;
+  const response=await post('/api/requests',{...request,rooms:['Worship Center'],equipment:['Sound Technician','TV Screens'],equipmentOther:''});
+  assert.equal(response.status,201);
+  const emails=messages.slice(before);
+  assert.equal(emails.length,2);
+  assert.equal(emails.filter(m=>m.to[0]==='melvin.anaya@newcitystc.church').length,1);
+  assert.match(emails.find(m=>m.to[0].startsWith('melvin.')).text,/token=/);
+});
+test('Squarespace embedding is allowed while approval pages remain protected', async () => {
+  const response=await fetch(base+'/?embed=1');
+  const policy=response.headers.get('content-security-policy');
+  assert.match(policy,/frame-ancestors 'self' https:\/\/newcitystc.church https:\/\/www.newcitystc.church/);
+  assert.ok(!policy.includes('frame-ancestors *'));
+  const approval=await fetch(base+'/approval');
+  assert.match(approval.headers.get('content-security-policy'),/frame-ancestors 'none'/);
 });
 test.after(async () => {globalThis.fetch=realFetch;await new Promise(resolve => server.close(resolve)); await rm(dir,{recursive:true,force:true});});

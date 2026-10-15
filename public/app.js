@@ -1,3 +1,13 @@
+const embedded = new URLSearchParams(location.search).get('embed') === '1';
+if (embedded) {
+  document.documentElement.classList.add('embedded');
+  const updateHeight = () => {
+    const message = {type:'newcity-form-height',height:Math.ceil(document.body.getBoundingClientRect().height)};
+    for (const origin of ['https://newcitystc.church','https://www.newcitystc.church']) window.parent.postMessage(message,origin);
+  };
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(updateHeight).observe(document.body);
+  window.addEventListener('load', updateHeight);
+}
 const form = document.querySelector('#request-form');
 const result = document.querySelector('#result');
 const submit = document.querySelector('#submit');

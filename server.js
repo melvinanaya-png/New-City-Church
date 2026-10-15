@@ -1,6 +1,6 @@
 import { calendarConfigured, createApprovedEvent, checkCalendarAccess } from './google-calendar.js';
 import { approvalEmailHtml } from './approval-email.js';
-import { ROOMS, approvalGroupsFor, approvalComplete } from './approvals.js';
+import { ROOMS, approvalGroupsFor, approvalComplete, AV_CONTACT, needsAvNotification } from './approvals.js';
 import { emailConfigured, sendMail } from './google-mail.js';
 import http from 'node:http';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
@@ -110,6 +110,8 @@ export const server = http.createServer(async (req, res) => {
       const approvalGroups = approvalGroupsFor(data.rooms);
       const tokens = [...new Set(approvalGroups.flatMap(group => group.approvers))].map(email => ({email,token:randomBytes(32).toString('hex')}));
       const record = {id, approvalGroups, approvals:tokens.map(({email,token}) => ({email,tokenHash:hash(token),approvedAt:null,notification:'pending'})), expiresAt: Date.now() + 14 * 86400000, ...Object.fromEntries(['name','email','title','ministry','date','start','end','guests','notes','rooms','roomsOther','equipment','equipmentOther','setup','quantities'].map(k => [k, data[k]])), status: 'pending', submittedAt: new Date().toISOString()};
+      record.avRequested = needsAvNotification(data.equipment);
+      record.avNotification = record.avRequested ? 'pending' : 'not-required';
       approving.add(id);
       try {
       await mkdir(dataDir, {recursive: true});
@@ -120,17 +122,27 @@ export const server = http.createServer(async (req, res) => {
         const routing = approvalGroups.map(group => `${group.name}: either ${group.approvers.join(' or ')}`).join('\n');
         const message = `New building request — pending review\nReference: ${id}\n\nEvent: ${data.title}\nMinistry: ${data.ministry}\nRequester: ${data.name} (${data.email})\nDate: ${data.date}\nTime: ${data.start}–${data.end} America/Chicago\n${requestDetails(record)}\nAttendance: ${data.guests}\nNotes: ${data.notes || 'None'}\n\nApproval routing:\n${routing}\nOne approval from each applicable room group is required. Hope can approve every group.\n\nPlease review and approve with your private link (expires in 14 days): ${approvalUrl}\nDo not forward this link; anyone with it can approve your room group(s). Once all room groups are approved, Darrell, Mark, and Daija are notified. After approval, the app adds the event to the shared Google Calendar when connected. Planning Center reservations remain separate.`;
         let delivered = false;
-        try {delivered = (await sendMail([email], `Building request: ${data.title.replace(/[\r\n]/g,' ')}`, message, `${id}-${record.approvals.findIndex(a => a.email === email)}`, data.email, approvalEmailHtml(record, approvalUrl, requestDetails(record), routing))).ok;} catch { /* Preserve the request and report uncertain delivery without automatic retries. */ }
+        try {delivered = (await sendMail([email], `${record.avRequested && email === AV_CONTACT ? 'AV support requested — ' : ''}Building request: ${data.title.replace(/[\r\n]/g,' ')}`, message, `${id}-${record.approvals.findIndex(a => a.email === email)}`, data.email, approvalEmailHtml(record, approvalUrl, requestDetails(record), routing))).ok;} catch { /* Preserve the request and report uncertain delivery without automatic retries. */ }
         record.approvals.find(a => a.email === email).notification = delivered ? 'sent' : 'failed-or-uncertain';
         await writeFile(file, JSON.stringify(record, null, 2), {mode:0o600});
       }
-      if (record.approvals.some(a => a.notification !== 'sent')) return json(res,502,{error:`Your request was saved, but some approval emails could not be confirmed. Contact facilities@newcitystc.church with reference ${id}. Do not resubmit.`});
+      if (record.avRequested) {
+        const approvalEmail = record.approvals.find(a => a.email === AV_CONTACT);
+        if (approvalEmail) record.avNotification = approvalEmail.notification === 'sent' ? 'included-in-approval-email' : 'failed-or-uncertain';
+        else {
+          let delivered = false;
+          try {delivered = (await sendMail([AV_CONTACT], `AV support requested: ${data.title.replace(/[\r\n]/g,' ')}`, `A building request includes AV support. This is an advance notice, not a confirmed booking or an approval assignment.\n\nEvent: ${data.title}\nRequester: ${data.name} (${data.email})\nDate: ${data.date}\nTime: ${data.start}–${data.end} Central Time\n${requestDetails(record)}\nNotes: ${data.notes || 'None'}\nReference: ${id}\n\nThe assigned room approvers will review the request.`, `av-${id}`, data.email)).ok;} catch { /* Preserve failure status for follow-up. */ }
+          record.avNotification = delivered ? 'sent' : 'failed-or-uncertain';
+        }
+        await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
+      }
+      if (record.approvals.some(a => a.notification !== 'sent') || record.avNotification === 'failed-or-uncertain') return json(res,502,{error:`Your request was saved, but some notification emails could not be confirmed. Contact facilities@newcitystc.church with reference ${id}. Do not resubmit.`});
       return json(res, 201, {id,status:'pending'});
       } finally {approving.delete(id);}
     }
     const files = {'/':'index.html','/styles.css':'styles.css','/app.js':'app.js','/approval.js':'approval.js','/assets/new-city-logo.png':'assets/new-city-logo.png','/assets/fonts/Barlow-Regular.ttf':'assets/fonts/Barlow-Regular.ttf','/assets/fonts/Barlow-Medium.ttf':'assets/fonts/Barlow-Medium.ttf','/assets/fonts/BarlowCondensed-SemiBold.ttf':'assets/fonts/BarlowCondensed-SemiBold.ttf'};
     if (req.method !== 'GET' || !files[path]) return json(res, 404, {error:'Not found'});
-    res.writeHead(200, {'Content-Type':path.endsWith('.png')?'image/png':path.endsWith('.ttf')?'font/ttf':path.endsWith('.css')?'text/css':path.endsWith('.js')?'text/javascript':'text/html','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self'; font-src 'self'; frame-ancestors 'none'"});
+    res.writeHead(200, {'Content-Type':path.endsWith('.png')?'image/png':path.endsWith('.ttf')?'font/ttf':path.endsWith('.css')?'text/css':path.endsWith('.js')?'text/javascript':'text/html','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self'; font-src 'self'; frame-ancestors 'self' https://newcitystc.church https://www.newcitystc.church"});
     res.end(await readFile(root + 'public/' + files[path]));
   } catch {json(res, 500, {error:'We could not complete your request. Please contact facilities@newcitystc.church before retrying.'});}
 });

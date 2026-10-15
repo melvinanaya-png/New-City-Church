@@ -1,0 +1,22 @@
+<!-- Paste this into a Squarespace Code Block in HTML mode. -->
+<iframe
+  id="newcity-building-form"
+  src="https://new-city-building-requests.onrender.com/?embed=1"
+  title="New City Church building and room request form"
+  width="100%"
+  height="2900"
+  style="display:block;width:100%;border:0;"
+></iframe>
+<p><a href="https://new-city-building-requests.onrender.com/" target="_blank" rel="noopener">Open the request form in a new tab</a></p>
+<!-- Optional auto-height script, if your Squarespace plan supports JavaScript. -->
+<script>
+(function () {
+  var frame = document.getElementById('newcity-building-form');
+  window.addEventListener('message', function (event) {
+    if (event.origin !== 'https://new-city-building-requests.onrender.com' || event.source !== frame.contentWindow) return;
+    if (event.data && event.data.type === 'newcity-form-height' && Number.isFinite(event.data.height) && event.data.height > 0 && event.data.height < 12000) {
+      frame.style.height = Math.ceil(event.data.height + 24) + 'px';
+    }
+  });
+})();
+</script>
