@@ -21,7 +21,7 @@ The app runs on port 3000 (`PORT` overrides it). `npm run dev` restarts on edits
 ## Workflow
 
 1. A visitor supplies event, contact, room, equipment and quantity details.
-2. The app sends a separate private approval link to each applicable approver:
+2. The app sends each approver a branded HTML email with an **Approve request** button that opens the website for confirmation. A plain-text alternative includes the private link for email clients without HTML support. Routing:
    - Upper Elementary, Lower Elementary, City Students, Pre K and Nursery: Milyn Farrier (`milyn.farrier@newcitystc.church`) or Hope (`hope.varwig@newcitystc.church`).
    - Worship Center: Melvin (`melvin.anaya@newcitystc.church`) or Hope.
    - City Commons, Kitchen, Entire Building and Other: Hope.

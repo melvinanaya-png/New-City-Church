@@ -18,7 +18,15 @@ globalThis.fetch = (url, options) => {
   if(url === 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send') {
     const raw = Buffer.from(JSON.parse(options.body).raw,'base64url').toString();
     const [headers,...parts] = raw.split('\r\n\r\n');
-    messages.push({to:headers.match(/^To: (.+)$/m)[1].trim().split(', '),from:headers.match(/^From: (.+)$/m)[1].trim(),text:Buffer.from(parts.join('\r\n\r\n').replace(/\r\n/g,''),'base64').toString()});
+    const boundary=headers.match(/boundary="([^"]+)"/)?.[1];
+    const decoded={};
+    if (boundary) {
+      for (const part of parts.join('\r\n\r\n').split(`--${boundary}`).slice(1,-1)) {
+        const [partHeaders,...encoded]=part.trim().split('\r\n\r\n');
+        decoded[partHeaders.includes('text/html')?'html':'text']=Buffer.from(encoded.join('\r\n\r\n').replace(/\r\n/g,''),'base64').toString();
+      }
+    } else decoded.text=Buffer.from(parts.join('\r\n\r\n').replace(/\r\n/g,''),'base64').toString();
+    messages.push({to:headers.match(/^To: (.+)$/m)[1].trim().split(', '),from:headers.match(/^From: (.+)$/m)[1].trim(),...decoded});
     return Promise.resolve(new Response('{}',{status:200}));
   }
   return realFetch(url,options);
@@ -46,6 +54,10 @@ test('Hope receives common-room requests; approval notifies Darrell and Mark onc
   assert.deepEqual(messages[0].to,['hope.varwig@newcitystc.church']);
   assert.equal(messages[0].from,'New City Church <melvin.anaya@newcitystc.church>');
   assert.equal(messages.length,1);
+  assert.match(messages[0].html,/Approve request/);
+  assert.match(messages[0].html,/href="http:\/\//);
+  assert.ok(messages[0].html.includes(tokenFrom(messages[0])));
+  assert.match(messages[0].html,/clicking the button alone does not approve/);
   assert.match(messages[0].text,/Rooms: City Commons, Kitchen/);
   assert.match(messages[0].text,/Equipment: Sound Technician, Microphones/);
   assert.match(messages[0].text,/Round Tables: 5, Chairs: 25/);
@@ -99,5 +111,13 @@ test('Hope alone can approve a request covering classrooms, worship and commons'
   const response=await post('/api/approve',{id,token:tokenFrom(hope)});
   assert.equal((await response.json()).status,'approved');
   assert.equal(messages.length,before+4);
+});
+test('HTML approval email escapes event details and preserves the private link', async () => {
+  const {approvalEmailHtml}=await import('../approval-email.js');
+  const url='https://example.com/approval#id=test&token=private';
+  const html=approvalEmailHtml({...request,id:'test',title:'<script>alert("x")</script>',notes:'<img src=x onerror=alert(1)>'},url,'Rooms: Kitchen','Hope');
+  assert.ok(!html.includes('<script>'));assert.ok(!html.includes('<img src=x'));
+  assert.match(html,/&lt;script&gt;/);
+  assert.ok(html.includes('href="https://example.com/approval#id=test&amp;token=private"'));
 });
 test.after(async () => {globalThis.fetch=realFetch;await new Promise(resolve => server.close(resolve)); await rm(dir,{recursive:true,force:true});});

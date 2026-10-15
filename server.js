@@ -1,3 +1,4 @@
+import { approvalEmailHtml } from './approval-email.js';
 import { ROOMS, approvalGroupsFor, approvalComplete } from './approvals.js';
 import { emailConfigured, sendMail } from './google-mail.js';
 import http from 'node:http';
@@ -106,7 +107,7 @@ export const server = http.createServer(async (req, res) => {
         const routing = approvalGroups.map(group => `${group.name}: either ${group.approvers.join(' or ')}`).join('\n');
         const message = `New building request — pending review\nReference: ${id}\n\nEvent: ${data.title}\nMinistry: ${data.ministry}\nRequester: ${data.name} (${data.email})\nDate: ${data.date}\nTime: ${data.start}–${data.end} America/Chicago\n${requestDetails(record)}\nAttendance: ${data.guests}\nNotes: ${data.notes || 'None'}\n\nApproval routing:\n${routing}\nOne approval from each applicable room group is required. Hope can approve every group.\n\nPlease review and approve with your private link (expires in 14 days): ${approvalUrl}\nDo not forward this link; anyone with it can approve your room group(s). Once all room groups are approved, Darrell and Mark are notified. Calendar entry remains manual because Planning Center's public API does not support event creation.`;
         let delivered = false;
-        try {delivered = (await sendMail([email], `Building request: ${data.title.replace(/[\r\n]/g,' ')}`, message, `${id}-${record.approvals.findIndex(a => a.email === email)}`, data.email)).ok;} catch { /* Preserve the request and report uncertain delivery without automatic retries. */ }
+        try {delivered = (await sendMail([email], `Building request: ${data.title.replace(/[\r\n]/g,' ')}`, message, `${id}-${record.approvals.findIndex(a => a.email === email)}`, data.email, approvalEmailHtml(record, approvalUrl, requestDetails(record), routing))).ok;} catch { /* Preserve the request and report uncertain delivery without automatic retries. */ }
         record.approvals.find(a => a.email === email).notification = delivered ? 'sent' : 'failed-or-uncertain';
         await writeFile(file, JSON.stringify(record, null, 2), {mode:0o600});
       }
