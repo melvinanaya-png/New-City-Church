@@ -1,4 +1,4 @@
-import { calendarConfigured, createApprovedEvent } from './google-calendar.js';
+import { calendarConfigured, createApprovedEvent, checkCalendarAccess } from './google-calendar.js';
 import { approvalEmailHtml } from './approval-email.js';
 import { ROOMS, approvalGroupsFor, approvalComplete } from './approvals.js';
 import { emailConfigured, sendMail } from './google-mail.js';
@@ -134,4 +134,7 @@ export const server = http.createServer(async (req, res) => {
     res.end(await readFile(root + 'public/' + files[path]));
   } catch {json(res, 500, {error:'We could not complete your request. Please contact facilities@newcitystc.church before retrying.'});}
 });
-if (process.argv[1] === fileURLToPath(import.meta.url)) server.listen(Number(process.env.PORT || 3000), '0.0.0.0', () => console.log('New City requests listening on port ' + (process.env.PORT || 3000)));
+if (process.argv[1] === fileURLToPath(import.meta.url)) server.listen(Number(process.env.PORT || 3000), '0.0.0.0', () => {
+  console.log('New City requests listening on port ' + (process.env.PORT || 3000));
+  checkCalendarAccess().then(result => console.log('Google Calendar check: ' + result)).catch(() => console.log('Google Calendar check: Unable to complete diagnostics.'));
+});

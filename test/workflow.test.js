@@ -27,6 +27,7 @@ globalThis.fetch = (url, options) => {
       calendarEvents.set(event.id,{...event,htmlLink:`https://calendar.google.com/calendar/event?eid=${event.id}`});
       return Promise.resolve(new Response(JSON.stringify(calendarEvents.get(event.id)),{status:201}));
     }
+    if(String(url).includes('?maxResults=')) return Promise.resolve(new Response(JSON.stringify({kind:'calendar#events'}),{status:200}));
     const event=calendarEvents.get(String(url).split('/').at(-1));
     return Promise.resolve(new Response(JSON.stringify(event||{}),{status:event?200:404}));
   }
@@ -177,5 +178,21 @@ test('deterministic event IDs recover an accepted insert when local result was l
   assert.equal((await createApprovedEvent(record,'Rooms: Kitchen')).status,'created');
   assert.equal(calendarEvents.size,count+1);
   await assert.rejects(createApprovedEvent({...record,status:'pending'},'Rooms: Kitchen'),/completed room approvals/);
+});
+test('calendar diagnostics distinguish missing scopes, disabled API, and policy without exposing raw provider text', async () => {
+  const {calendarError}=await import('../google-calendar.js');
+  const errorFor = error => calendarError(new Response(JSON.stringify({error}),{status:403}));
+  assert.match(await errorFor({errors:[{reason:'insufficientPermissions'}]}),/refresh token lacks Calendar permission/);
+  assert.match(await errorFor({details:[{reason:'ACCESS_TOKEN_SCOPE_INSUFFICIENT'}]}),/ACCESS_TOKEN_SCOPE_INSUFFICIENT/);
+  assert.match(await errorFor({details:[{reason:'SERVICE_DISABLED'}]}),/API is disabled/);
+  assert.match(await errorFor({errors:[{reason:'domainPolicy'}]}),/Workspace policy/);
+  const unknown=await errorFor({message:'sensitive-token-example',details:[{reason:'sensitive-token-example'}]});
+  assert.ok(!unknown.includes('sensitive-token-example'));
+});
+test('startup calendar check performs no event insert or email send', async () => {
+  const {checkCalendarAccess}=await import('../google-calendar.js');
+  const inserts=calendarInserts,emails=messages.length;
+  assert.match(await checkCalendarAccess(),/read access verified/);
+  assert.equal(calendarInserts,inserts);assert.equal(messages.length,emails);
 });
 test.after(async () => {globalThis.fetch=realFetch;await new Promise(resolve => server.close(resolve)); await rm(dir,{recursive:true,force:true});});

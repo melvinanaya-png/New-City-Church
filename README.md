@@ -64,6 +64,8 @@ https://www.googleapis.com/auth/calendar.events
 
 Exchange the authorization code for tokens and replace `GOOGLE_REFRESH_TOKEN` securely in Render. Keep the same matching client ID and secret. The authorized account must be allowed to make changes to the target calendar. Save and redeploy. Do not paste tokens in chat. `calendarConfigured: true` means settings are present, not that permission or live insertion has been verified. The integration has mocked tests but no live Calendar verification yet.
 
+On startup, `Google Calendar check:` in server logs reports a read-only access check. It requests only the response kind, never event details, and does not create events or send emails. Calendar failures distinguish missing OAuth scopes, disabled API, Workspace policy, permission and quota errors using recognized Google reason codes without logging raw provider responses or tokens. Successful read access does not establish write access.
+
 Events contain the requested date/time (America/Chicago), rooms, equipment, setup quantities, requester and notes. Leaders view events through the calendar's sharing settings; the app does not invite attendees or send Google meeting invitations. The user chose organization-wide calendar visibility; review event-detail visibility before entering sensitive information.
 
 If Google Calendar returns an error, the page and facilities notification say entry is pending and offer retry. Retrying does not resend completed facilities notifications. Do not manually create a duplicate while an uncertain automatic insert is unresolved. Durable request storage remains required: deterministic event IDs protect retries of an existing request, but do not restore approval records lost from Render's ephemeral disk.
