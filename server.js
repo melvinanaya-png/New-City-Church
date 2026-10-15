@@ -1,3 +1,4 @@
+import { validateRecurrence, recurrenceSummary } from './recurrence.js';
 import { calendarConfigured, createApprovedEvent, checkCalendarAccess } from './google-calendar.js';
 import { approvalEmailHtml } from './approval-email.js';
 import { ROOMS, approvalGroupsFor, approvalComplete, AV_CONTACT, needsAvNotification } from './approvals.js';
@@ -16,7 +17,7 @@ export function validate(data) {
   const required = ['name', 'email', 'title', 'ministry', 'date', 'start', 'end'];
   for (const field of required) if (typeof data[field] !== 'string' || !data[field].trim() || data[field].length > 200) return `Please provide a valid ${field}.`;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) return 'Please enter a valid email address.';
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(data.date) || !Number.isFinite(Date.parse(data.date))) return 'Choose a valid date.';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data.date) || !Number.isFinite(Date.parse(data.date)) || new Date(data.date).toISOString().slice(0,10) !== data.date) return 'Choose a valid date.';
   if (![data.start, data.end].every(t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)) || data.end <= data.start) return 'End time must be after start time.';
   if (!Number.isInteger(Number(data.guests)) || Number(data.guests) < 1 || Number(data.guests) > 5000) return 'Enter an attendance between 1 and 5,000.';
   if (typeof data.notes !== 'string' || data.notes.length > 4000) return 'Notes must be under 4,000 characters.';
@@ -36,6 +37,8 @@ export function validate(data) {
   for (const [choice, key] of [['Round Tables','roundTables'], ['Rectangular Tables','rectangularTables'], ['Chairs','chairs']]) {
     if (data.setup.includes(choice) && (!Number.isInteger(data.quantities[key]) || data.quantities[key] < 1 || data.quantities[key] > 5000)) return `Specify a quantity between 1 and 5,000 for ${choice.toLowerCase()}.`;
   }
+  const recurrenceError = validateRecurrence(data.recurrence);
+  if (recurrenceError) return recurrenceError;
   if (data.agree !== true) return 'Please acknowledge that your request requires approval.';
 }
 function requestDetails(record) {
@@ -43,7 +46,7 @@ function requestDetails(record) {
   const rooms = record.rooms ? record.rooms.join(', ') + (record.rooms.includes('Other') ? ` (${record.roomsOther})` : '') : record.space;
   const equipment = record.equipment ? record.equipment.join(', ') + (record.equipment.includes('Other') ? ` (${record.equipmentOther})` : '') : (record.needs || []).join(', ');
   const setup = record.setup ? record.setup.map(choice => `${choice}: ${record.quantities?.[{'Round Tables':'roundTables','Rectangular Tables':'rectangularTables','Chairs':'chairs'}[choice]]}`).join(', ') || 'None requested' : 'See original notes';
-  return `Rooms: ${rooms}\nEquipment: ${equipment}\nSetup quantities: ${setup}`;
+  return `Schedule: ${recurrenceSummary(record.date,record.recurrence)}\nRooms: ${rooms}\nEquipment: ${equipment}\nSetup quantities: ${setup}`;
 }
 const json = (res, status, value) => {res.writeHead(status, {'Content-Type': 'application/json', 'Cache-Control': 'no-store'}); res.end(JSON.stringify(value));};
 export const server = http.createServer(async (req, res) => {
@@ -109,7 +112,7 @@ export const server = http.createServer(async (req, res) => {
       const id = randomUUID();
       const approvalGroups = approvalGroupsFor(data.rooms);
       const tokens = [...new Set(approvalGroups.flatMap(group => group.approvers))].map(email => ({email,token:randomBytes(32).toString('hex')}));
-      const record = {id, approvalGroups, approvals:tokens.map(({email,token}) => ({email,tokenHash:hash(token),approvedAt:null,notification:'pending'})), expiresAt: Date.now() + 14 * 86400000, ...Object.fromEntries(['name','email','title','ministry','date','start','end','guests','notes','rooms','roomsOther','equipment','equipmentOther','setup','quantities'].map(k => [k, data[k]])), status: 'pending', submittedAt: new Date().toISOString()};
+      const record = {id, approvalGroups, approvals:tokens.map(({email,token}) => ({email,tokenHash:hash(token),approvedAt:null,notification:'pending'})), expiresAt: Date.now() + 14 * 86400000, ...Object.fromEntries(['name','email','title','ministry','date','start','end','guests','notes','rooms','roomsOther','equipment','equipmentOther','setup','quantities','recurrence'].map(k => [k, data[k]])), status: 'pending', submittedAt: new Date().toISOString()};
       record.avRequested = needsAvNotification(data.equipment);
       record.avNotification = record.avRequested ? 'pending' : 'not-required';
       approving.add(id);
@@ -120,7 +123,7 @@ export const server = http.createServer(async (req, res) => {
       for (const {email,token} of tokens) {
         const approvalUrl = `${process.env.PUBLIC_BASE_URL.replace(/\/$/, '')}/approval#id=${id}&token=${token}`;
         const routing = approvalGroups.map(group => `${group.name}: either ${group.approvers.join(' or ')}`).join('\n');
-        const message = `New building request — pending review\nReference: ${id}\n\nEvent: ${data.title}\nMinistry: ${data.ministry}\nRequester: ${data.name} (${data.email})\nDate: ${data.date}\nTime: ${data.start}–${data.end} America/Chicago\n${requestDetails(record)}\nAttendance: ${data.guests}\nNotes: ${data.notes || 'None'}\n\nApproval routing:\n${routing}\nOne approval from each applicable room group is required. Hope can approve every group.\n\nPlease review and approve with your private link (expires in 14 days): ${approvalUrl}\nDo not forward this link; anyone with it can approve your room group(s). Once all room groups are approved, Darrell, Mark, and Daija are notified. After approval, the app adds the event to the shared Google Calendar when connected. Planning Center reservations remain separate.`;
+        const message = `New building request — pending review\nReference: ${id}\n\nEvent: ${data.title}\nMinistry: ${data.ministry}\nRequester: ${data.name} (${data.email})\nDate: ${data.date}\nTime: ${data.start}–${data.end} America/Chicago\n${requestDetails(record)}\nAttendance: ${data.guests}\nNotes: ${data.notes || 'None'}\n\nApproval routing:\n${routing}\nYour approval covers the complete schedule shown above. One approval from each applicable room group is required. Hope can approve every group.\n\nPlease review and approve with your private link (expires in 14 days): ${approvalUrl}\nDo not forward this link; anyone with it can approve your room group(s). Once all room groups are approved, Darrell, Mark, and Daija are notified. After approval, the app adds the event to the shared Google Calendar when connected. Planning Center reservations remain separate.`;
         let delivered = false;
         try {delivered = (await sendMail([email], `${record.avRequested && email === AV_CONTACT ? 'AV support requested — ' : ''}Building request: ${data.title.replace(/[\r\n]/g,' ')}`, message, `${id}-${record.approvals.findIndex(a => a.email === email)}`, data.email, approvalEmailHtml(record, approvalUrl, requestDetails(record), routing))).ok;} catch { /* Preserve the request and report uncertain delivery without automatic retries. */ }
         record.approvals.find(a => a.email === email).notification = delivered ? 'sent' : 'failed-or-uncertain';

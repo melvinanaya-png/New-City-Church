@@ -151,6 +151,7 @@ test('Google Calendar insert waits for final room coverage and uses Central Time
   assert.deepEqual(event.start,{dateTime:'2026-12-12T17:00:00',timeZone:'America/Chicago'});
   assert.deepEqual(event.end,{dateTime:'2026-12-12T19:00:00',timeZone:'America/Chicago'});
   assert.match(event.description,/Round Tables: 5, Chairs: 25/);
+  assert.equal(event.recurrence,undefined,'one-time requests do not become recurring');
   assert.equal(event.attendees,undefined,'no meeting invitations sent to leaders');
   assert.equal(calendarEvents.size,count+1);
   assert.match(messages.at(-1).text,/Added to the shared/);
@@ -245,5 +246,34 @@ test('Squarespace embedding is allowed while approval pages remain protected', a
   assert.ok(!policy.includes('frame-ancestors *'));
   const approval=await fetch(base+'/approval');
   assert.match(approval.headers.get('content-security-policy'),/frame-ancestors 'none'/);
+});
+test('recurring requests validate bounded schedules and preserve one-time events', async () => {
+  const {recurrenceRule,recurrenceSummary}=await import('../recurrence.js');
+  assert.equal(validate({...request,recurrence:null}),undefined);
+  for (const recurrence of [{frequency:'weekly',interval:0,count:12},{frequency:'weekly',interval:2,count:1},{frequency:'weekly',interval:2,count:105},{frequency:'monthly',interval:2,count:12},{frequency:'weekly',interval:2,count:2.5},'weekly']) assert.ok(validate({...request,recurrence}));
+  assert.match(validate({...request,date:'2026-02-30'}),/valid date/);
+  assert.equal(recurrenceRule('2026-10-21',{frequency:'weekly',interval:2,count:12}),'RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=WE;COUNT=12');
+  assert.equal(recurrenceRule('2026-10-21',{frequency:'weekly',interval:1,count:4}),'RRULE:FREQ=WEEKLY;INTERVAL=1;BYDAY=WE;COUNT=4');
+  assert.equal(recurrenceRule('2026-10-31',{frequency:'monthly',interval:1,count:6}),'RRULE:FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=31;COUNT=6');
+  assert.match(recurrenceSummary('2026-10-31',{frequency:'monthly',interval:1,count:6}),/months without this day are skipped/);
+  assert.equal(recurrenceRule(request.date,null),undefined);
+});
+test('every-other-Wednesday series is emailed and created only after approval without duplicates', async () => {
+  const before=messages.length,count=calendarEvents.size;
+  const response=await post('/api/requests',{...request,title:'Bible study',date:'2026-10-21',recurrence:{frequency:'weekly',interval:2,count:12}});
+  assert.equal(response.status,201);
+  const {id}=await response.json();
+  assert.equal(calendarEvents.size,count);
+  assert.match(messages[before].text,/Every other Wednesday · 12 total occurrences/);
+  assert.match(messages[before].html,/Every other Wednesday · 12 total occurrences/);
+  const token=tokenFrom(messages[before]);
+  assert.equal((await (await post('/api/approve',{id,token})).json()).calendarStatus,'created');
+  const event=calendarEvents.get('nc'+id.replace(/-/g,''));
+  assert.deepEqual(event.recurrence,['RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=WE;COUNT=12']);
+  assert.deepEqual(event.start,{dateTime:'2026-10-21T17:00:00',timeZone:'America/Chicago'});
+  assert.match(messages.at(-1).text,/Every other Wednesday · 12 total occurrences/);
+  const inserts=calendarInserts, sent=messages.length;
+  await post('/api/approve',{id,token});
+  assert.equal(calendarInserts,inserts);assert.equal(messages.length,sent);
 });
 test.after(async () => {globalThis.fetch=realFetch;await new Promise(resolve => server.close(resolve)); await rm(dir,{recursive:true,force:true});});

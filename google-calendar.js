@@ -1,3 +1,4 @@
+import { recurrenceRule } from './recurrence.js';
 import { googleAccessToken } from './google-mail.js';
 export function calendarConfigured() {
   return Boolean(process.env.GOOGLE_CALENDAR_ID && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REFRESH_TOKEN);
@@ -50,6 +51,7 @@ export async function createApprovedEvent(record, details) {
     start:{dateTime:`${record.date}T${record.start}:00`,timeZone:'America/Chicago'},
     end:{dateTime:`${record.date}T${record.end}:00`,timeZone:'America/Chicago'},
     extendedProperties:{private:{newCityRequestId:record.id}},
+    ...(record.recurrence ? {recurrence:[recurrenceRule(record.date,record.recurrence)]} : {}),
     reminders:{useDefault:false}
   };
   try {

@@ -90,3 +90,10 @@ The app can be embedded only on `https://newcitystc.church` and `https://www.new
 On the Squarespace page `/new-page`, enter Edit mode and add a Code Block in HTML mode. Paste `docs/squarespace-embed.html`. The optional script sizes the iframe using messages checked against the app's exact origin and iframe window. If JavaScript is unavailable, the fixed-height iframe remains scrollable. If the Squarespace plan disallows iframes, use a Button Block linking to the full app instead. Preview on mobile and desktop before replacing the old form. The app's embedded view hides duplicate navigation and the introductory panel but retains the New City logo and full form.
 
 The repository update does not edit or publish Squarespace. The user must apply the block with their Squarespace account. Durable storage is still required before opening the page for real requests; Render Free can lose approval records on restarts/deployments.
+
+
+## Recurring gatherings
+
+The optional Repeat selector supports weekly, every-other-week and monthly gatherings. The requester chooses 2–104 total occurrences (including the first). The first event date sets the weekday or day of month. Monthly dates 29–31 skip months without that date, as explained by the form. There is no unlimited repeat option.
+
+The full schedule is stored with the request, shown in approval/AV/facilities emails, and covered by the room approvals. The app sends one notification workflow for the entire series. After approval, Google Calendar receives one recurring event with a bounded RRULE and America/Chicago timezone so local meeting times remain consistent across daylight saving changes. Request IDs prevent duplicate series on retries. One-time requests continue to work with an omitted or null recurrence. Calendar changes/cancellations after creation must currently be managed by calendar editors; there is no request-editing flow.

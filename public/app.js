@@ -13,7 +13,24 @@ const result = document.querySelector('#result');
 const submit = document.querySelector('#submit');
 const connection = document.querySelector('#connection');
 const groups = [...form.querySelectorAll('[data-required-group]')];
+function updateRecurrence() {
+  const repeat = form.elements.repeat.value;
+  const repeating = repeat !== 'none';
+  document.querySelector('#repeat-details').hidden = !repeating;
+  form.elements.occurrences.disabled = !repeating;
+  form.elements.occurrences.required = repeating;
+  const summary = document.querySelector('#recurrence-summary');
+  if (!repeating) {summary.textContent = ''; return;}
+  const date = form.elements.date.value;
+  if (!date) {summary.textContent = 'Choose the first event date to preview the schedule.'; return;}
+  const day = new Intl.DateTimeFormat('en-US', {weekday:'long',timeZone:'UTC'}).format(new Date(`${date}T12:00:00Z`));
+  const schedule = repeat === 'monthly' ? `Monthly on day ${Number(date.slice(8,10))}` : `${repeat === 'biweekly' ? 'Every other' : 'Every'} ${day}`;
+  const count = Number(form.elements.occurrences.value);
+  summary.textContent = `${schedule} · ${count || 'Choose number of'} total occurrences, including the first.${repeat === 'monthly' && Number(date.slice(8,10)) > 28 ? ' Months without this day are skipped.' : ''}`;
+}
+form.elements.occurrences.addEventListener('input', updateRecurrence);
 function updateSelections() {
+  updateRecurrence();
   for (const group of groups) {
     const name = group.dataset.requiredGroup;
     const checks = [...group.querySelectorAll(`input[name="${name}"]`)];
@@ -42,6 +59,7 @@ form.addEventListener('submit', async event => {
   data.quantities = Object.fromEntries(['roundTables', 'rectangularTables', 'chairs'].filter(key => fields.has(key)).map(key => [key, Number(fields.get(key))]));
   data.roomsOther = fields.get('roomsOther') || ''; data.equipmentOther = fields.get('equipmentOther') || '';
   data.agree = fields.has('agree');
+  data.recurrence = fields.get('repeat') === 'none' ? null : {frequency:fields.get('repeat') === 'monthly' ? 'monthly' : 'weekly',interval:fields.get('repeat') === 'biweekly' ? 2 : 1,count:Number(fields.get('occurrences'))};
   if(data.end <= data.start) {result.textContent = 'Please choose an end time after the start time.'; result.focus(); return;}
   submit.disabled = true; submit.textContent = 'Sending your request…'; result.textContent = ''; result.className = '';
   try {
