@@ -5,7 +5,8 @@ export function approvalGroupsFor(rooms) {
   const groups = [];
   if (rooms.some(room => CLASSROOMS.includes(room))) groups.push({name:'Classrooms',approvers:['milyn.farrier@newcitystc.church', HOPE]});
   if (rooms.includes('Worship Center')) groups.push({name:'Worship Center',approvers:['melvin.anaya@newcitystc.church', HOPE]});
-  if (rooms.some(room => ['City Commons','Kitchen','Entire Building','Other'].includes(room))) groups.push({name:'Other rooms',approvers:[HOPE]});
+  if (rooms.includes('City Commons')) groups.push({name:'City Commons',approvers:['hospitality@newcitystc.church', HOPE]});
+  if (rooms.some(room => ['Kitchen','Entire Building','Other'].includes(room))) groups.push({name:'Other rooms',approvers:[HOPE]});
   return groups;
 }
 export function approvalComplete(record) {

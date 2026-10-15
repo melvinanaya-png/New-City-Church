@@ -8,7 +8,7 @@ import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('.', import.meta.url));
 const dataDir = process.env.DATA_DIR || root + '.data/requests';
-const approvedRecipients = ['facilities@newcitystc.church', 'mark.forbes@newcitystc.church'];
+const approvedRecipients = ['facilities@newcitystc.church', 'mark.forbes@newcitystc.church', 'DaijaO2006@gmail.com'];
 const hash = value => createHash('sha256').update(value).digest('hex');
 const approving = new Set();
 export function validate(data) {
@@ -26,7 +26,7 @@ export function validate(data) {
     setup: ['Round Tables', 'Rectangular Tables', 'Chairs']
   };
   for (const [name, choices] of Object.entries(groups)) {
-    if (!Array.isArray(data[name]) || data[name].length < 1 || data[name].length > choices.length || new Set(data[name]).size !== data[name].length || data[name].some(value => !choices.includes(value))) return `Select at least one valid ${name} option.`;
+    if (!Array.isArray(data[name]) || data[name].length < (name === 'setup' ? 0 : 1) || data[name].length > choices.length || new Set(data[name]).size !== data[name].length || data[name].some(value => !choices.includes(value))) return `Select at least one valid ${name} option.`;
   }
   for (const name of ['rooms', 'equipment']) {
     const detail = data[`${name}Other`];
@@ -42,7 +42,7 @@ function requestDetails(record) {
   // Old records can still be reviewed until their approval links expire.
   const rooms = record.rooms ? record.rooms.join(', ') + (record.rooms.includes('Other') ? ` (${record.roomsOther})` : '') : record.space;
   const equipment = record.equipment ? record.equipment.join(', ') + (record.equipment.includes('Other') ? ` (${record.equipmentOther})` : '') : (record.needs || []).join(', ');
-  const setup = record.setup ? record.setup.map(choice => `${choice}: ${record.quantities?.[{'Round Tables':'roundTables','Rectangular Tables':'rectangularTables','Chairs':'chairs'}[choice]]}`).join(', ') : 'See original notes';
+  const setup = record.setup ? record.setup.map(choice => `${choice}: ${record.quantities?.[{'Round Tables':'roundTables','Rectangular Tables':'rectangularTables','Chairs':'chairs'}[choice]]}`).join(', ') || 'None requested' : 'See original notes';
   return `Rooms: ${rooms}\nEquipment: ${equipment}\nSetup quantities: ${setup}`;
 }
 const json = (res, status, value) => {res.writeHead(status, {'Content-Type': 'application/json', 'Cache-Control': 'no-store'}); res.end(JSON.stringify(value));};
@@ -118,7 +118,7 @@ export const server = http.createServer(async (req, res) => {
       for (const {email,token} of tokens) {
         const approvalUrl = `${process.env.PUBLIC_BASE_URL.replace(/\/$/, '')}/approval#id=${id}&token=${token}`;
         const routing = approvalGroups.map(group => `${group.name}: either ${group.approvers.join(' or ')}`).join('\n');
-        const message = `New building request — pending review\nReference: ${id}\n\nEvent: ${data.title}\nMinistry: ${data.ministry}\nRequester: ${data.name} (${data.email})\nDate: ${data.date}\nTime: ${data.start}–${data.end} America/Chicago\n${requestDetails(record)}\nAttendance: ${data.guests}\nNotes: ${data.notes || 'None'}\n\nApproval routing:\n${routing}\nOne approval from each applicable room group is required. Hope can approve every group.\n\nPlease review and approve with your private link (expires in 14 days): ${approvalUrl}\nDo not forward this link; anyone with it can approve your room group(s). Once all room groups are approved, Darrell and Mark are notified. After approval, the app adds the event to the shared Google Calendar when connected. Planning Center reservations remain separate.`;
+        const message = `New building request — pending review\nReference: ${id}\n\nEvent: ${data.title}\nMinistry: ${data.ministry}\nRequester: ${data.name} (${data.email})\nDate: ${data.date}\nTime: ${data.start}–${data.end} America/Chicago\n${requestDetails(record)}\nAttendance: ${data.guests}\nNotes: ${data.notes || 'None'}\n\nApproval routing:\n${routing}\nOne approval from each applicable room group is required. Hope can approve every group.\n\nPlease review and approve with your private link (expires in 14 days): ${approvalUrl}\nDo not forward this link; anyone with it can approve your room group(s). Once all room groups are approved, Darrell, Mark, and Daija are notified. After approval, the app adds the event to the shared Google Calendar when connected. Planning Center reservations remain separate.`;
         let delivered = false;
         try {delivered = (await sendMail([email], `Building request: ${data.title.replace(/[\r\n]/g,' ')}`, message, `${id}-${record.approvals.findIndex(a => a.email === email)}`, data.email, approvalEmailHtml(record, approvalUrl, requestDetails(record), routing))).ok;} catch { /* Preserve the request and report uncertain delivery without automatic retries. */ }
         record.approvals.find(a => a.email === email).notification = delivered ? 'sent' : 'failed-or-uncertain';

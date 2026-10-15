@@ -6,7 +6,7 @@ A responsive building-request page, using Node.js 22+ with no third-party runtim
 
 The supplied New City Church brand guide defines the color palette: blue `#4f8cad`, cream `#fcfaed`, charcoal `#333132`, green `#779221`, and rust `#a94018`. The page uses the original blue logo extracted from the guide, Barlow for body text, and Barlow Condensed SemiBold for uppercase headings. Fonts are hosted locally under the SIL Open Font License, included in `public/assets/fonts/OFL.txt`.
 
-Room request, equipment/setup needs, and setup requirements are required multi-select groups. Selected round tables, rectangular tables, and chairs require positive whole-number quantities. Selecting Other for rooms or equipment requires a description. The approval agreement is required. The browser and server validate these requirements, and both notification emails include selections and quantities.
+Room request and equipment needs are required multi-select groups. Tables and chairs are optional; leave setup selections blank if none are needed. Selected round tables, rectangular tables, and chairs require positive whole-number quantities. Selecting Other for rooms or equipment requires a description. The approval agreement is required. The browser and server validate these requirements, and both notification emails include selections and quantities.
 
 ## Run
 
@@ -24,10 +24,11 @@ The app runs on port 3000 (`PORT` overrides it). `npm run dev` restarts on edits
 2. The app sends each approver a branded HTML email with an **Approve request** button that opens the website for confirmation. A plain-text alternative includes the private link for email clients without HTML support. Routing:
    - Upper Elementary, Lower Elementary, City Students, Pre K and Nursery: Milyn Farrier (`milyn.farrier@newcitystc.church`) or Hope (`hope.varwig@newcitystc.church`).
    - Worship Center: Melvin (`melvin.anaya@newcitystc.church`) or Hope.
-   - City Commons, Kitchen, Entire Building and Other: Hope.
+   - City Commons: Hospitality (`hospitality@newcitystc.church`) or Hope.
+   - Kitchen, Entire Building and Other: Hope.
 3. Either assigned person can approve a room group. Requests spanning different groups require coverage of each group; Hope can approve all groups. For example, a classroom + Worship Center request can be approved by Hope alone, or by Milyn and Melvin together. Each person receives one email even when multiple rooms are selected. Opening a link does not approve.
-4. Once all selected room groups are approved, the app notifies `facilities@newcitystc.church` (Darrell) and `mark.forbes@newcitystc.church` (Mark). Duplicate or late approvals do not resend completed notifications.
-5. Once all room groups are approved, the app creates one event in the configured **shared Google Calendar** and emails Darrell and Mark the outcome. Calendar errors leave the request approved with an explicit pending-calendar message; retry from the same approval link. Retries use the same Google event ID to avoid duplicates. Google Calendar does not create Planning Center reservations.
+4. Once all selected room groups are approved, the app notifies `facilities@newcitystc.church` (Darrell) , `mark.forbes@newcitystc.church` (Mark), and `DaijaO2006@gmail.com` (Daija Owens, setup coordinator). Duplicate or late approvals do not resend completed notifications.
+5. Once all room groups are approved, the app creates one event in the configured **shared Google Calendar** and emails Darrell, Mark, and Daija the outcome. Calendar errors leave the request approved with an explicit pending-calendar message; retry from the same approval link. Retries use the same Google event ID to avoid duplicates. Google Calendar does not create Planning Center reservations.
 
 Approval links expire after 14 days and act as bearer credentials; do not forward them. Tokens are stored only as hashes, carried in URL fragments, and removed from the browser URL when the approval page loads. Approval records must survive restarts for the links to work. Render Free currently has no durable storage configured; it remains unsuitable for real requests until storage is connected.
 
