@@ -27,7 +27,7 @@ The app runs on port 3000 (`PORT` overrides it). `npm run dev` restarts on edits
    - City Commons, Kitchen, Entire Building and Other: Hope.
 3. Either assigned person can approve a room group. Requests spanning different groups require coverage of each group; Hope can approve all groups. For example, a classroom + Worship Center request can be approved by Hope alone, or by Milyn and Melvin together. Each person receives one email even when multiple rooms are selected. Opening a link does not approve.
 4. Once all selected room groups are approved, the app notifies `facilities@newcitystc.church` (Darrell) and `mark.forbes@newcitystc.church` (Mark). Duplicate or late approvals do not resend completed notifications.
-5. **Planning Center Calendar entry is manual.** Its current public Calendar API has no event creation operation. Emails explicitly request manual calendar entry.
+5. Once all room groups are approved, the app creates one event in the configured **shared Google Calendar** and emails Darrell and Mark the outcome. Calendar errors leave the request approved with an explicit pending-calendar message; retry from the same approval link. Retries use the same Google event ID to avoid duplicates. Google Calendar does not create Planning Center reservations.
 
 Approval links expire after 14 days and act as bearer credentials; do not forward them. Tokens are stored only as hashes, carried in URL fragments, and removed from the browser URL when the approval page loads. Approval records must survive restarts for the links to work. Render Free currently has no durable storage configured; it remains unsuitable for real requests until storage is connected.
 
@@ -37,9 +37,9 @@ During testing, all emails are sent as **melvin.anaya@newcitystc.church** throug
 
 A Google Workspace / Google Cloud administrator should:
 
-1. Create a Google Cloud project, enable the Gmail API, and configure an Internal OAuth consent audience for the church's Workspace organization where available.
+1. Create a Google Cloud project, enable the Gmail API and Google Calendar API, and configure an Internal OAuth consent audience for the church's Workspace organization where available.
 2. Create a server-side Web Application OAuth client. Register the actual authorization callback URL of the tool used for setup; the request app does not currently host an OAuth callback.
-3. Obtain an offline refresh token by having Melvin sign in for testing (Hope when switching the sender) and explicitly grant the `https://www.googleapis.com/auth/gmail.send` scope through a trusted OAuth authorization flow. Do not use anyone's regular Google password. External apps left in testing may have short-lived refresh tokens; configure the app's appropriate production/internal status with the administrator.
+3. Obtain an offline refresh token by having Melvin sign in for testing (Hope when switching the sender) and explicitly grant both `https://www.googleapis.com/auth/gmail.send` and `https://www.googleapis.com/auth/calendar.events` scopes through a trusted OAuth authorization flow. Do not use anyone's regular Google password. External apps left in testing may have short-lived refresh tokens; configure the app's appropriate production/internal status with the administrator.
 4. Store `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN` securely in environment settings. Do not commit these values or paste them in chat. The cloud configuration declares secret requirements, not values.
 5. Set `PUBLIC_BASE_URL` to the actual HTTPS origin serving this app. It must not point to the existing church website unless this app is deployed there.
 
@@ -47,9 +47,30 @@ A Google Workspace / Google Cloud administrator should:
 
 `DATA_DIR` optionally sets a persistent private request directory; default is `.data/requests` in the checkout. Retain records across restarts. No records are publicly served. Without Google configuration, visitors see preview mode and submitting returns an honest unavailable message.
 
+## Shared Google Calendar
+
+Set `GOOGLE_CALENDAR_ID` in Render to:
+
+```text
+c_856d9d9e318f7ac86bd0853b496002b294a8148bac8b9d23b8f42b65b13c6787@group.calendar.google.com
+```
+
+Enable **Google Calendar API** in the same Google Cloud project as the OAuth client. Use Google OAuth Playground with the existing OAuth client and authorize **both** scopes together as `melvin.anaya@newcitystc.church`:
+
+```text
+https://www.googleapis.com/auth/gmail.send
+https://www.googleapis.com/auth/calendar.events
+```
+
+Exchange the authorization code for tokens and replace `GOOGLE_REFRESH_TOKEN` securely in Render. Keep the same matching client ID and secret. The authorized account must be allowed to make changes to the target calendar. Save and redeploy. Do not paste tokens in chat. `calendarConfigured: true` means settings are present, not that permission or live insertion has been verified. The integration has mocked tests but no live Calendar verification yet.
+
+Events contain the requested date/time (America/Chicago), rooms, equipment, setup quantities, requester and notes. Leaders view events through the calendar's sharing settings; the app does not invite attendees or send Google meeting invitations. The user chose organization-wide calendar visibility; review event-detail visibility before entering sensitive information.
+
+If Google Calendar returns an error, the page and facilities notification say entry is pending and offer retry. Retrying does not resend completed facilities notifications. Do not manually create a duplicate while an uncertain automatic insert is unresolved. Durable request storage remains required: deterministic event IDs protect retries of an existing request, but do not restore approval records lost from Render's ephemeral disk.
+
 ## Planning Center Calendar limitation
 
-Automatic creation is unavailable through the documented public Calendar API. The official [2026-06-22 OpenAPI specification](https://api.planningcenteronline.com/calendar/v2/open_api/2026-06-22) exposes GET for `/events`, `/events/{event_id}`, event instances, and resource requests, with no POST operation to create an event. Credentials cannot enable an operation absent from the supported API. Calendar notifications therefore ask Darrell/Mark to enter approved events manually; `calendarConfigured` remains false.
+Automatic creation is unavailable through the documented public Calendar API. The official [2026-06-22 OpenAPI specification](https://api.planningcenteronline.com/calendar/v2/open_api/2026-06-22) exposes GET for `/events`, `/events/{event_id}`, event instances, and resource requests, with no POST operation to create an event. Credentials cannot enable an operation absent from the supported API. The shared Google Calendar is the supported alternative. Any Planning Center reservations remain manual; `calendarConfigured` refers only to the Google Calendar settings.
 
 Before building any alternative calendar automation, confirm a supported creation method with Planning Center. Do not use private endpoints or browser automation with shared account passwords as a substitute.
 

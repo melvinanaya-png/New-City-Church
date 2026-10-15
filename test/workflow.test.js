@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 const dir = await mkdtemp(join(tmpdir(), 'newcity-tests-'));
 process.env.DATA_DIR = dir;
+delete process.env.GOOGLE_CALENDAR_ID;
 delete process.env.GOOGLE_CLIENT_ID; delete process.env.GOOGLE_CLIENT_SECRET; delete process.env.GOOGLE_REFRESH_TOKEN;
 const {approvalGroupsFor} = await import('../approvals.js');
 const {server, validate} = await import('../server.js');
@@ -13,7 +14,22 @@ await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 const realFetch = globalThis.fetch;
 const messages = [];
+const calendarEvents = new Map();
+let calendarFailure = false;
+let calendarInserts = 0;
 globalThis.fetch = (url, options) => {
+  if(String(url).startsWith('https://www.googleapis.com/calendar/v3/')) {
+    if(calendarFailure) return Promise.resolve(new Response('{}',{status:403}));
+    if(options.method === 'POST') {
+      calendarInserts++;
+      const event=JSON.parse(options.body);
+      if(calendarEvents.has(event.id)) return Promise.resolve(new Response('{}',{status:409}));
+      calendarEvents.set(event.id,{...event,htmlLink:`https://calendar.google.com/calendar/event?eid=${event.id}`});
+      return Promise.resolve(new Response(JSON.stringify(calendarEvents.get(event.id)),{status:201}));
+    }
+    const event=calendarEvents.get(String(url).split('/').at(-1));
+    return Promise.resolve(new Response(JSON.stringify(event||{}),{status:event?200:404}));
+  }
   if(url === 'https://oauth2.googleapis.com/token') return Promise.resolve(new Response(JSON.stringify({access_token:'test-access-token'}),{status:200}));
   if(url === 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send') {
     const raw = Buffer.from(JSON.parse(options.body).raw,'base64url').toString();
@@ -119,5 +135,47 @@ test('HTML approval email escapes event details and preserves the private link',
   assert.ok(!html.includes('<script>'));assert.ok(!html.includes('<img src=x'));
   assert.match(html,/&lt;script&gt;/);
   assert.ok(html.includes('href="https://example.com/approval#id=test&amp;token=private"'));
+});
+test('Google Calendar insert waits for final room coverage and uses Central Time', async () => {
+  process.env.GOOGLE_CALENDAR_ID='test-calendar@group.calendar.google.com';
+  const before=messages.length, count=calendarEvents.size;
+  const {id}=await (await post('/api/requests',{...request,rooms:['Nursery','Worship Center']})).json();
+  const emails=messages.slice(before), milyn=emails.find(m=>m.to[0].startsWith('milyn.')), melvin=emails.find(m=>m.to[0].startsWith('melvin.'));
+  await post('/api/approve',{id,token:tokenFrom(milyn)});
+  assert.equal(calendarEvents.size,count);
+  const response=await post('/api/approve',{id,token:tokenFrom(melvin)});
+  assert.equal((await response.json()).calendarStatus,'created');
+  const event=calendarEvents.get('nc'+id.replace(/-/g,''));
+  assert.deepEqual(event.start,{dateTime:'2026-12-12T17:00:00',timeZone:'America/Chicago'});
+  assert.deepEqual(event.end,{dateTime:'2026-12-12T19:00:00',timeZone:'America/Chicago'});
+  assert.match(event.description,/Round Tables: 5, Chairs: 25/);
+  assert.equal(event.attendees,undefined,'no meeting invitations sent to leaders');
+  assert.equal(calendarEvents.size,count+1);
+  assert.match(messages.at(-1).text,/Added to the shared/);
+  const inserts=calendarInserts,notifications=messages.length;
+  await post('/api/approve',{id,token:tokenFrom(melvin)});
+  assert.equal(calendarInserts,inserts);assert.equal(messages.length,notifications);
+});
+test('calendar failure is reported honestly and retry creates one event without resending notifications', async () => {
+  const before=messages.length;
+  const {id}=await (await post('/api/requests',request)).json();
+  const token=tokenFrom(messages[before]);
+  calendarFailure=true;
+  let result=await (await post('/api/approve',{id,token})).json();
+  assert.equal(result.calendarStatus,'failed');assert.match(result.calendarError,/denied/);
+  assert.match(messages.at(-1).text,/CALENDAR ACTION REQUIRED/);
+  const sent=messages.length;
+  calendarFailure=false;
+  result=await (await post('/api/approve',{id,token})).json();
+  assert.equal(result.calendarStatus,'created');assert.equal(messages.length,sent);
+});
+test('deterministic event IDs recover an accepted insert when local result was lost', async () => {
+  const {createApprovedEvent}=await import('../google-calendar.js');
+  const record={...request,id:'11111111-1111-4111-8111-111111111111',status:'approved'};
+  const count=calendarEvents.size;
+  assert.equal((await createApprovedEvent(record,'Rooms: Kitchen')).status,'created');
+  assert.equal((await createApprovedEvent(record,'Rooms: Kitchen')).status,'created');
+  assert.equal(calendarEvents.size,count+1);
+  await assert.rejects(createApprovedEvent({...record,status:'pending'},'Rooms: Kitchen'),/completed room approvals/);
 });
 test.after(async () => {globalThis.fetch=realFetch;await new Promise(resolve => server.close(resolve)); await rm(dir,{recursive:true,force:true});});

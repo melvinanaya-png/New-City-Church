@@ -1,3 +1,4 @@
+import { calendarConfigured, createApprovedEvent } from './google-calendar.js';
 import { approvalEmailHtml } from './approval-email.js';
 import { ROOMS, approvalGroupsFor, approvalComplete } from './approvals.js';
 import { emailConfigured, sendMail } from './google-mail.js';
@@ -48,7 +49,7 @@ const json = (res, status, value) => {res.writeHead(status, {'Content-Type': 'ap
 export const server = http.createServer(async (req, res) => {
   try {
     const path = new URL(req.url, 'http://localhost').pathname;
-    if (req.method === 'GET' && path === '/api/status') return json(res, 200, {emailConfigured: emailConfigured(), calendarConfigured: false});
+    if (req.method === 'GET' && path === '/api/status') return json(res, 200, {emailConfigured: emailConfigured(), calendarConfigured: calendarConfigured()});
     if (path === '/approval' && req.method === 'GET') {
       res.writeHead(200, {'Content-Type':'text/html','Referrer-Policy':'no-referrer','Cache-Control':'no-store','Content-Security-Policy':"default-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'"});
       return res.end(await readFile(root + 'public/approval.html'));
@@ -69,7 +70,7 @@ export const server = http.createServer(async (req, res) => {
         }
         const approver = record.approvals.find(approval => approval.tokenHash === hash(input.token));
         if(!approver) return json(res,403,{error:'Invalid approval link.'});
-        if(record.status === 'approved' && record.approvalNotification === 'sent') return json(res,200,{status:'approved',calendarStatus:record.calendarStatus});
+        if(record.status === 'approved' && record.approvalNotification === 'sent' && record.calendarStatus === 'created') return json(res,200,{status:'approved',calendarStatus:record.calendarStatus,calendarError:record.calendarError});
         if(Date.now() > record.expiresAt) return json(res,410,{error:'This approval link has expired. Contact the site administrator.'});
         approver.approvedAt ||= new Date().toISOString();
         const complete = approvalComplete(record);
@@ -78,13 +79,25 @@ export const server = http.createServer(async (req, res) => {
           await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
           return json(res,200,{status:'pending',remainingGroups:record.approvalGroups.filter(group => !group.approvers.some(email => record.approvals.some(a => a.email === email && a.approvedAt))).map(group => group.name)});
         }
-        record.approvedAt ||= new Date().toISOString(); record.calendarStatus = 'manual-entry-required'; record.approvalNotification = 'pending';
+        record.approvedAt ||= new Date().toISOString();
+        record.calendarTargetId ||= process.env.GOOGLE_CALENDAR_ID;
+        await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
+        if (record.calendarStatus !== 'created') {
+          const calendar = await createApprovedEvent(record,requestDetails(record));
+          record.calendarStatus = calendar.status; record.calendarError = calendar.error;
+          if (calendar.status === 'created') {record.calendarEventId = calendar.eventId; record.calendarEventUrl = calendar.url;}
+        }
+        if (record.approvalNotification === 'sent') {
+          await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
+          return json(res,200,{status:'approved',calendarStatus:record.calendarStatus,calendarError:record.calendarError});
+        }
+        record.approvalNotification = 'pending';
         await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
         const approvedBy = record.approvals.filter(a => a.approvedAt).map(a => a.email).join(', ');
-        const response = await sendMail(approvedRecipients, `Approved building request: ${record.title.replace(/[\r\n]/g,' ')}`, `This building request has received all required room approvals.\nApproved by: ${approvedBy}\n\nEvent: ${record.title}\nRequester: ${record.name} (${record.email})\nMinistry: ${record.ministry}\nDate: ${record.date}\nTime: ${record.start}–${record.end} Central Time\n${requestDetails(record)}\nAttendance: ${record.guests}\nNotes: ${record.notes}\nReference: ${record.id}\n\nCALENDAR ACTION REQUIRED: Please add this approved event and its rooms to Planning Center Calendar manually. Planning Center's public Calendar API does not support creating events; this request has not been added automatically.`, `approved-${record.id}`, record.email);
+        const response = await sendMail(approvedRecipients, `Approved building request: ${record.title.replace(/[\r\n]/g,' ')}`, `This building request has received all required room approvals.\nApproved by: ${approvedBy}\n\nEvent: ${record.title}\nRequester: ${record.name} (${record.email})\nMinistry: ${record.ministry}\nDate: ${record.date}\nTime: ${record.start}–${record.end} Central Time\n${requestDetails(record)}\nAttendance: ${record.guests}\nNotes: ${record.notes}\nReference: ${record.id}\n\n${record.calendarStatus === 'created' ? `Added to the shared New City Building Google Calendar.${record.calendarEventUrl ? `\nCalendar event: ${record.calendarEventUrl}` : ''}` : `CALENDAR ACTION REQUIRED: Google Calendar entry is pending. ${record.calendarError || 'Check calendar setup.'} Reopen the approval link and confirm again to retry without creating a duplicate.`}\n\nGoogle Calendar does not reserve rooms in Planning Center; any Planning Center entry remains manual.`, `approved-${record.id}`, record.email);
         if(!response.ok) return json(res,502,{error:'Approval was saved, but notifications failed. Retry approval to resend the notifications.'});
         record.approvalNotification = 'sent'; await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
-        return json(res,200,{status:'approved',calendarStatus:record.calendarStatus});
+        return json(res,200,{status:'approved',calendarStatus:record.calendarStatus,calendarError:record.calendarError});
       } finally {approving.delete(input.id);}
     }
     if (req.method === 'POST' && path === '/api/requests') {
@@ -105,7 +118,7 @@ export const server = http.createServer(async (req, res) => {
       for (const {email,token} of tokens) {
         const approvalUrl = `${process.env.PUBLIC_BASE_URL.replace(/\/$/, '')}/approval#id=${id}&token=${token}`;
         const routing = approvalGroups.map(group => `${group.name}: either ${group.approvers.join(' or ')}`).join('\n');
-        const message = `New building request — pending review\nReference: ${id}\n\nEvent: ${data.title}\nMinistry: ${data.ministry}\nRequester: ${data.name} (${data.email})\nDate: ${data.date}\nTime: ${data.start}–${data.end} America/Chicago\n${requestDetails(record)}\nAttendance: ${data.guests}\nNotes: ${data.notes || 'None'}\n\nApproval routing:\n${routing}\nOne approval from each applicable room group is required. Hope can approve every group.\n\nPlease review and approve with your private link (expires in 14 days): ${approvalUrl}\nDo not forward this link; anyone with it can approve your room group(s). Once all room groups are approved, Darrell and Mark are notified. Calendar entry remains manual because Planning Center's public API does not support event creation.`;
+        const message = `New building request — pending review\nReference: ${id}\n\nEvent: ${data.title}\nMinistry: ${data.ministry}\nRequester: ${data.name} (${data.email})\nDate: ${data.date}\nTime: ${data.start}–${data.end} America/Chicago\n${requestDetails(record)}\nAttendance: ${data.guests}\nNotes: ${data.notes || 'None'}\n\nApproval routing:\n${routing}\nOne approval from each applicable room group is required. Hope can approve every group.\n\nPlease review and approve with your private link (expires in 14 days): ${approvalUrl}\nDo not forward this link; anyone with it can approve your room group(s). Once all room groups are approved, Darrell and Mark are notified. After approval, the app adds the event to the shared Google Calendar when connected. Planning Center reservations remain separate.`;
         let delivered = false;
         try {delivered = (await sendMail([email], `Building request: ${data.title.replace(/[\r\n]/g,' ')}`, message, `${id}-${record.approvals.findIndex(a => a.email === email)}`, data.email, approvalEmailHtml(record, approvalUrl, requestDetails(record), routing))).ok;} catch { /* Preserve the request and report uncertain delivery without automatic retries. */ }
         record.approvals.find(a => a.email === email).notification = delivered ? 'sent' : 'failed-or-uncertain';
