@@ -121,9 +121,9 @@ At submission, the requester receives the signed agreement PDF and fee-sheet PDF
 
 ### Room reset photos
 
-Three church-supplied HEIC photographs are retained as JPEG references: City Commons layout, City Commons chair storage, and kitchen. Original Reset files are authoritative. Separately labelled Enhanced Visual Aid copies use AI-assisted lighting/clarity edits and may change small details; they are not the definitive reset references. The originals remain preserved in the upload workspace and the original-layout JPEG assets remain alongside enhanced copies.
+Three church-supplied HEIC photographs are retained as JPEG references: City Commons layout, City Commons chair storage, and kitchen. Only enhanced copies are included in outgoing emails, as explicitly requested by the user. They are labelled as enhanced visual aids because small details may differ from the actual room. Original files remain stored but are not attached. The originals remain preserved in the upload workspace and the original-layout JPEG assets remain alongside enhanced copies.
 
-`RESET_PHOTOS` in `agreement.js` maps room names to attachment arrays. City Commons alone receives its two originals and two enhanced views, not the kitchen images. Selecting Kitchen adds the kitchen original and enhanced view; Entire Building receives all photos. No photos are exposed through public application routes. Kitchen-specific cleanup duties apply only when the kitchen is used. City Commons + Kitchen can be approved by Hospitality or Hope; Kitchen alone still routes to Hope. Existing signed terms stay snapshotted, while new requests use agreement version `2026-10-20-v6`.
+`RESET_PHOTOS` in `agreement.js` maps room names to attachment arrays. City Commons alone receives only its two enhanced views, not the kitchen image. Selecting Kitchen adds only its enhanced view; Entire Building receives all photos. No photos are exposed through public application routes. Kitchen-specific cleanup duties apply only when the kitchen is used. City Commons + Kitchen can be approved by Hospitality or Hope; Kitchen alone still routes to Hope. Existing signed terms stay snapshotted, while new requests use agreement version `2026-10-20-v6`.
 
 ### Expanded fee sheet
 

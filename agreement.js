@@ -57,16 +57,14 @@ export function contractPdf(record) {
     doc.end();
   });
 }
-// Original photos are the authoritative reset references; enhanced images are labelled visual aids.
+// Only the user-selected enhanced images are emailed; originals remain stored for reference.
 const photo = (file,filename) => ({path:`./public/assets/reset-photos/${file}`,filename,type:'image/jpeg'});
 export const RESET_PHOTOS = {
   'City Commons':[
-    photo('city-commons-layout-original.jpg','City-Commons-Layout-Original-Reset.jpg'),
-    photo('city-commons-storage-original.jpg','City-Commons-Chair-Storage-Original-Reset.jpg'),
     photo('city-commons-layout-enhanced.jpg','City-Commons-Layout-Enhanced-Visual-Aid.jpg'),
     photo('city-commons-storage-enhanced.jpg','City-Commons-Chair-Storage-Enhanced-Visual-Aid.jpg')
   ],
-  Kitchen:[photo('kitchen-original.jpg','Kitchen-Original-Reset.jpg'),photo('kitchen-enhanced.jpg','Kitchen-Enhanced-Visual-Aid.jpg')]
+  Kitchen:[photo('kitchen-enhanced.jpg','Kitchen-Enhanced-Visual-Aid.jpg')]
 };
 function photosFor(record) {
   const rooms=record.rooms.includes('Entire Building')?Object.keys(RESET_PHOTOS):record.rooms;
@@ -83,6 +81,6 @@ export function roomResetNote(record) {
   const rooms=record.rooms.includes('Entire Building')?Object.keys(RESET_PHOTOS):record.rooms;
   const available=rooms.filter(room=>RESET_PHOTOS[room]);
   const kitchen=rooms.includes('Kitchen');
-  const references=available.length ? `Reset photos are attached for: ${available.join(', ')}. Files marked Original Reset are the authoritative references. Enhanced Visual Aid files have adjusted lighting and may differ in small details; follow the original photos when restoring furniture and equipment. Ask facilities for reset instructions for any other rooms.` : 'Please obtain the required room reset instructions from facilities before use.';
+  const references=available.length ? `Reset photos are attached for: ${available.join(', ')}. The attached enhanced photos show the requested room layout. Small details may differ from the actual room; follow any specific instructions from facilities when restoring furniture and equipment. Ask facilities for reset instructions for any other rooms.` : 'Please obtain the required room reset instructions from facilities before use.';
   return references+'\n'+(kitchen ? 'Kitchen use was requested. Restore the kitchen to its original condition and complete the kitchen cleanup duties in your agreement.' : 'Kitchen use was not requested. City Commons does not automatically reserve the kitchen; select Kitchen in a new request if you intend to use it. Kitchen-specific cleanup applies only if the kitchen is used.');
 }

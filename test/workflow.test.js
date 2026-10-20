@@ -372,7 +372,7 @@ test('requester receives a private signed PDF and fee document at submission and
   const receipt=requesterMessages[copies];assert.ok(receipt);
   assert.match(receipt.text,/still pending approval/);assert.match(receipt.text,/responsible for setup/);
   assert.ok(!receipt.text.includes('token='));assert.ok(!receipt.text.includes('lockbox code:'));
-  assert.equal(receipt.attachments.length,4);
+  assert.equal(receipt.attachments.length,3);
   assert.ok(receipt.attachments[0].content.subarray(0,4).equals(Buffer.from('%PDF')));
   assert.ok(receipt.attachments[0].filename.includes(id));
   const {readFile}=await import('node:fs/promises');
@@ -417,13 +417,14 @@ test('City Commons photos exclude kitchen unless requested, and shared approval 
   const {contractAttachments,signedAgreement,roomResetNote}=await import('../agreement.js');
   const common={...request,rooms:['City Commons'],id:'commons-reference',agreement:signedAgreement(request)};
   let attachments=await contractAttachments(common);
-  assert.equal(attachments.filter(a=>a.type==='image/jpeg').length,4);
+  assert.equal(attachments.filter(a=>a.type==='image/jpeg').length,2);
   assert.ok(!attachments.some(a=>a.filename.startsWith('Kitchen')));
   assert.match(roomResetNote(common),/Kitchen use was not requested/);
   const withKitchen={...common,rooms:['City Commons','Kitchen']};
   attachments=await contractAttachments(withKitchen);
-  assert.equal(attachments.filter(a=>a.type==='image/jpeg').length,6);
-  assert.equal(attachments.filter(a=>a.filename.startsWith('Kitchen')).length,2);
+  assert.equal(attachments.filter(a=>a.type==='image/jpeg').length,3);
+  assert.ok(!attachments.some(a=>a.filename.includes('Original')),'original images are not emailed');
+  assert.equal(attachments.filter(a=>a.filename.startsWith('Kitchen')).length,1);
   assert.match(roomResetNote(withKitchen),/Kitchen use was requested/);
   assert.equal(approvalGroupsFor(withKitchen.rooms).length,1);
   assert.deepEqual(approvalGroupsFor(withKitchen.rooms)[0].approvers,['hospitality@newcitystc.church','hope.varwig@newcitystc.church']);
