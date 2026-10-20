@@ -8,11 +8,13 @@ import { approvalEmailHtml } from './approval-email.js';
 import { ROOMS, approvalGroupsFor, approvalComplete, AV_CONTACT, needsAvNotification } from './approvals.js';
 import { emailConfigured, sendMail } from './google-mail.js';
 import http from 'node:http';
-import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
+import { requestStoreFromEnvironment } from './request-store.js';
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('.', import.meta.url));
 const dataDir = process.env.DATA_DIR || root + '.data/requests';
+const requestStore = requestStoreFromEnvironment(dataDir);
 const approvedRecipients = ['facilities@newcitystc.church', 'mark.forbes@newcitystc.church'];
 const hash = value => createHash('sha256').update(value).digest('hex');
 const approving = new Set();
@@ -64,19 +66,19 @@ function requestDetails(record,includeSignature=true) {
   const setup = record.setup ? record.setup.map(choice => `${choice}: ${record.quantities?.[{'Round Tables':'roundTables','Rectangular Tables':'rectangularTables','Chairs':'chairs'}[choice]]}`).join(', ') || 'None requested' : 'See original notes';
   return `Setup/cleanup: ${setupResponsibility(record)}\n${includeSignature ? `Agreement: ${record.agreement ? `Signed by ${record.agreement.signedName} at ${record.agreement.signedAt}; version ${record.agreement.version}` : 'No signed agreement on file for this older request'}\n` : ''}Schedule: ${recurrenceSummary(record.date,record.recurrence)}\nRooms: ${rooms}\nEquipment: ${equipment}\nSetup quantities: ${setup}`;
 }
-async function sendApprovalCopy(record,file) {
+async function sendApprovalCopy(record) {
   if(!record.agreement || record.requesterApprovalNotification==='sent')return true;
   let sent=false;
   try{sent=(await sendRequesterCopy(record,'approved')).ok;}catch{ /* Record uncertain delivery without logging the contract. */ }
   record.requesterApprovalNotification=sent?'sent':'failed-or-uncertain';
-  await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
+  await requestStore.save(record);
   return sent;
 }
 const json = (res, status, value) => {res.writeHead(status, {'Content-Type': 'application/json', 'Cache-Control': 'no-store'}); res.end(JSON.stringify(value));};
 export const server = http.createServer(async (req, res) => {
   try {
     const path = new URL(req.url, 'http://localhost').pathname;
-    if (req.method === 'GET' && path === '/api/status') return json(res, 200, {emailConfigured: emailConfigured(), calendarConfigured: calendarConfigured()});
+    if (req.method === 'GET' && path === '/api/status') return json(res, 200, {emailConfigured: emailConfigured(), calendarConfigured: calendarConfigured(), storageBackend:requestStore.backend, durableStorageConfigured:requestStore.backend==='firestore'});
     if (path === '/api/availability' && req.method === 'POST') {
       let body=''; for await(const chunk of req) {body+=chunk;if(body.length>4000)return json(res,413,{error:'Request too large.'});}
       let data;try{data=JSON.parse(body);}catch{return json(res,400,{error:'Invalid request.'});}
@@ -96,8 +98,8 @@ export const server = http.createServer(async (req, res) => {
       approving.add(input.id);
       const releaseBookingLock=await acquireBookingLock();
       try {
-        const file = `${dataDir}/${input.id}.json`;
-        let record; try {record = JSON.parse(await readFile(file,'utf8'));} catch {return json(res,404,{error:'Request not found.'});}
+        const record = await requestStore.get(input.id);
+        if(!record)return json(res,404,{error:'Request not found.'});
         // Preserve old single-approver test links when their records still exist.
         if (!record.approvals) {
           record.approvals = [{email:'melvin.anaya@newcitystc.church',tokenHash:record.tokenHash,approvedAt:null}];
@@ -111,30 +113,30 @@ export const server = http.createServer(async (req, res) => {
         const complete = approvalComplete(record);
         record.status = complete ? 'approved' : 'pending';
         if (!complete) {
-          await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
+          await requestStore.save(record);
           return json(res,200,{status:'pending',remainingGroups:record.approvalGroups.filter(group => !group.approvers.some(email => record.approvals.some(a => a.email === email && a.approvedAt))).map(group => group.name)});
         }
         if(record.calendarStatus !== 'created' && availabilityFailure(res,await checkAvailability(record))) return;
         record.approvedAt ||= new Date().toISOString();
         record.calendarTargetId ||= process.env.GOOGLE_CALENDAR_ID;
-        await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
+        await requestStore.save(record);
         if (record.calendarStatus !== 'created') {
           const calendar = await createApprovedEvent(record,requestDetails(record,false));
           record.calendarStatus = calendar.status; record.calendarError = calendar.error;
           if (calendar.status === 'created') {record.calendarEventId = calendar.eventId; record.calendarEventUrl = calendar.url;}
         }
         if (record.approvalNotification === 'sent') {
-          await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
-          if(!await sendApprovalCopy(record,file))return json(res,502,{error:'Approval was saved, but the requester confirmation could not be confirmed. Retry from this approval link; do not submit a new request.'});
+          await requestStore.save(record);
+          if(!await sendApprovalCopy(record))return json(res,502,{error:'Approval was saved, but the requester confirmation could not be confirmed. Retry from this approval link; do not submit a new request.'});
           return json(res,200,{status:'approved',calendarStatus:record.calendarStatus,calendarError:record.calendarError});
         }
         record.approvalNotification = 'pending';
-        await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
+        await requestStore.save(record);
         const approvedBy = record.approvals.filter(a => a.approvedAt).map(a => a.email).join(', ');
         const response = await sendMail(approvedRecipients, `Approved building request: ${record.title.replace(/[\r\n]/g,' ')}`, `This building request has received all required room approvals.\nApproved by: ${approvedBy}\n\nEvent: ${record.title}\nRequester: ${record.name} (${record.email})\nMinistry: ${record.ministry}\nDate: ${record.date}\nTime: ${record.start}–${record.end} Central Time\n${requestDetails(record)}\nAttendance: ${record.guests}\nNotes: ${record.notes}\nReference: ${record.id}\n\n${record.calendarStatus === 'created' ? `Added to the shared New City Building Google Calendar.${record.calendarEventUrl ? `\nCalendar event: ${record.calendarEventUrl}` : ''}` : `CALENDAR ACTION REQUIRED: Google Calendar entry is pending. ${record.calendarError || 'Check calendar setup.'} Reopen the approval link and confirm again to retry without creating a duplicate.`}\n\nGoogle Calendar does not reserve rooms in Planning Center; any Planning Center entry remains manual.`, `approved-${record.id}`, record.email, undefined, await contractAttachments(record));
         if(!response.ok) return json(res,502,{error:'Approval was saved, but notifications failed. Retry approval to resend the notifications.'});
-        record.approvalNotification = 'sent'; await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
-        if(!await sendApprovalCopy(record,file))return json(res,502,{error:'Approval was saved, but the requester confirmation could not be confirmed. Retry from this approval link; do not submit a new request.'});
+        record.approvalNotification = 'sent'; await requestStore.save(record);
+        if(!await sendApprovalCopy(record))return json(res,502,{error:'Approval was saved, but the requester confirmation could not be confirmed. Retry from this approval link; do not submit a new request.'});
         return json(res,200,{status:'approved',calendarStatus:record.calendarStatus,calendarError:record.calendarError});
       } finally {releaseBookingLock();approving.delete(input.id);}
     }
@@ -155,9 +157,7 @@ export const server = http.createServer(async (req, res) => {
       record.avNotification = record.avRequested ? 'pending' : 'not-required';
       approving.add(id);
       try {
-      await mkdir(dataDir, {recursive: true});
-      const file = `${dataDir}/${id}.json`;
-      await writeFile(file, JSON.stringify(record, null, 2), {mode: 0o600});
+      await requestStore.save(record);
       const attachments = await contractAttachments(record);
       for (const {email,token} of tokens) {
         const approvalUrl = `${process.env.PUBLIC_BASE_URL.replace(/\/$/, '')}/approval#id=${id}&token=${token}`;
@@ -166,7 +166,7 @@ export const server = http.createServer(async (req, res) => {
         let delivered = false;
         try {delivered = (await sendMail([email], `${record.avRequested && email === AV_CONTACT ? 'AV support requested — ' : ''}Building request: ${data.title.replace(/[\r\n]/g,' ')}`, message, `${id}-${record.approvals.findIndex(a => a.email === email)}`, data.email, approvalEmailHtml(record, approvalUrl, requestDetails(record), routing), attachments)).ok;} catch { /* Preserve the request and report uncertain delivery without automatic retries. */ }
         record.approvals.find(a => a.email === email).notification = delivered ? 'sent' : 'failed-or-uncertain';
-        await writeFile(file, JSON.stringify(record, null, 2), {mode:0o600});
+        await requestStore.save(record);
       }
       if (record.avRequested) {
         const approvalEmail = record.approvals.find(a => a.email === AV_CONTACT);
@@ -176,12 +176,12 @@ export const server = http.createServer(async (req, res) => {
           try {delivered = (await sendMail([AV_CONTACT], `AV support requested: ${data.title.replace(/[\r\n]/g,' ')}`, `A building request includes AV support. This is an advance notice, not a confirmed booking or an approval assignment.\n\nEvent: ${data.title}\nRequester: ${data.name} (${data.email})\nDate: ${data.date}\nTime: ${data.start}–${data.end} Central Time\n${requestDetails(record)}\nNotes: ${data.notes || 'None'}\nReference: ${id}\n\n${setupResponsibility(record)}\nThe assigned room approvers will review the request.`, `av-${id}`, data.email)).ok;} catch { /* Preserve failure status for follow-up. */ }
           record.avNotification = delivered ? 'sent' : 'failed-or-uncertain';
         }
-        await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
+        await requestStore.save(record);
       }
       let requesterSent=false;
       try{requesterSent=(await sendRequesterCopy(record,'received',attachments)).ok;}catch{ /* Preserve the signed request if delivery is uncertain. */ }
       record.requesterReceiptNotification=requesterSent?'sent':'failed-or-uncertain';
-      await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});
+      await requestStore.save(record);
       if (record.approvals.some(a => a.notification !== 'sent') || record.avNotification === 'failed-or-uncertain' || !requesterSent) return json(res,502,{error:`Your request was saved, but some notification emails could not be confirmed. Contact facilities@newcitystc.church with reference ${id}. Do not resubmit.`});
       return json(res, 201, {id,status:'pending'});
       } finally {approving.delete(id);}
@@ -196,5 +196,6 @@ export const server = http.createServer(async (req, res) => {
 });
 if (process.argv[1] === fileURLToPath(import.meta.url)) server.listen(Number(process.env.PORT || 3000), '0.0.0.0', () => {
   console.log('New City requests listening on port ' + (process.env.PORT || 3000));
+  requestStore.check().then(result=>console.log('Request storage check: '+result)).catch(()=>console.log('Request storage check failed. Check Firestore database, service account and permissions; requests will not fall back to local files.'));
   checkCalendarAccess().then(result => console.log('Google Calendar check: ' + result)).catch(() => console.log('Google Calendar check: Unable to complete diagnostics.'));
 });

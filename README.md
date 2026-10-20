@@ -108,7 +108,7 @@ New calendar entries store structured room metadata. Existing app events are rec
 
 Google expands existing recurring bookings, and the app expands requested weekly/biweekly/monthly dates in America/Chicago, including DST. The whole calendar result set is paginated; incomplete reads block booking. All-day events also block their rooms. Pending approvals for an existing calendar request ignore that request's own event to preserve safe retry behavior.
 
-Final approval checks and event inserts are serialized within the single Node process. Google Calendar itself does not enforce room exclusivity: simultaneous manual edits, other integrations, or multiple app instances can bypass this process-level lock. Use the form as the booking entry point and keep one app process; durable storage and distributed coordination are still needed before broader production use. Firestore storage remains unfinished.
+Final approval checks and event inserts are serialized within the single Node process. Google Calendar itself does not enforce room exclusivity: simultaneous manual edits, other integrations, or multiple app instances can bypass this process-level lock. Use the form as the booking entry point and keep one app process; durable storage and distributed coordination are still needed before broader production use. Firestore support is implemented; production configuration and a live persistence test are still required (see docs/firestore-setup.md).
 
 
 ## Signed building-use agreement
@@ -117,7 +117,7 @@ New requests require the displayed current agreement, a typed full-name signatur
 
 The contract includes requester-provided setup/teardown/cleaning, all supplied kitchen and room cleanup duties, a $50 lost-key fee, and responsibility for damage charges determined from repair/replacement costs without a fixed damage amount. Fees are not automatically calculated or charged: the uploaded sheet has hourly and flat-rate sections, and staff must confirm the applicable charges.
 
-At submission, the requester receives the signed agreement PDF and fee-sheet PDF reviewed at signing with a clear pending-approval notice. Approval emails to staff also include these documents. After full approval, the requester receives another copy and room-reset instructions. Completed requester/staff notifications are tracked separately to avoid resending completed messages on retry. Signed agreements are never served through public URLs. Keep the record store private and persistent; email attachments do not replace durable approval-record storage. Firestore remains unfinished.
+At submission, the requester receives the signed agreement PDF and fee-sheet PDF reviewed at signing with a clear pending-approval notice. Approval emails to staff also include these documents. After full approval, the requester receives another copy and room-reset instructions. Completed requester/staff notifications are tracked separately to avoid resending completed messages on retry. Signed agreements are never served through public URLs. Keep the record store private and persistent; email attachments do not replace durable approval-record storage. Configure Firestore and verify persistence using docs/firestore-setup.md.
 
 ### Room reset photos
 
@@ -140,3 +140,7 @@ Setup inventory limits per request: 6 round tables, 8 rectangular tables, and 60
 Event setup policy: Daija is not a notification recipient. Groups handle setup and cleanup unless the church confirms assistance separately; staff arrange any help outside the form. Approved staff notifications go only to Darrell and Mark.
 
 The event-type question has been removed at the user’s request. New requests do not classify internal/outside events. The simplified setup policy says groups handle setup, teardown and cleanup unless the church separately confirms assistance; the form never assigns a setup volunteer. Staff coordinate any church-event help outside the form.
+
+### Durable Google storage
+
+Firestore support is available: follow [the Firestore setup guide](docs/firestore-setup.md) to create a private database and configure Render. Set `STORAGE_BACKEND=firestore`, `FIRESTORE_PROJECT_ID`, and `FIRESTORE_SERVICE_ACCOUNT_JSON` in Render's private environment settings. Until configured, the app still uses local files. Do not paste service-account JSON into chat or commit it. Existing local records are not automatically migrated. Verify a test request survives redeployment before using this for real signed requests.
