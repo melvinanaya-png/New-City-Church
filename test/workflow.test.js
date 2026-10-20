@@ -436,4 +436,10 @@ test('fee sheet applies the confirmed $25 rate to every student and children’s
     for(const name of ['Pre K Room','Upper Elementary Room','Lower Elementary Room','Nursery Room'])assert.equal(section.find(([room])=>room===name)[1],25);
   }
 });
+test('setup quantities accept each inventory limit and reject amounts above it', () => {
+  for(const [choice,key,limit] of [['Round Tables','roundTables',6],['Rectangular Tables','rectangularTables',8],['Chairs','chairs',60]]) {
+    assert.equal(validate({...request,setup:[choice],quantities:{[key]:limit}}),undefined);
+    assert.match(validate({...request,setup:[choice],quantities:{[key]:limit+1}}),new RegExp(`between 1 and ${limit}`));
+  }
+});
 test.after(async () => {globalThis.fetch=realFetch;await new Promise(resolve => server.close(resolve)); await rm(dir,{recursive:true,force:true});});

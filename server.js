@@ -48,8 +48,8 @@ export function validate(data) {
     if (typeof detail !== 'string' || detail.length > 500 || (data[name].includes('Other') && !detail.trim())) return `Please specify other ${name}.`;
   }
   if (!data.quantities || typeof data.quantities !== 'object' || Array.isArray(data.quantities)) return 'Specify setup quantities.';
-  for (const [choice, key] of [['Round Tables','roundTables'], ['Rectangular Tables','rectangularTables'], ['Chairs','chairs']]) {
-    if (data.setup.includes(choice) && (!Number.isInteger(data.quantities[key]) || data.quantities[key] < 1 || data.quantities[key] > 5000)) return `Specify a quantity between 1 and 5,000 for ${choice.toLowerCase()}.`;
+  for (const [choice, key, limit] of [['Round Tables','roundTables',6], ['Rectangular Tables','rectangularTables',8], ['Chairs','chairs',60]]) {
+    if (data.setup.includes(choice) && (!Number.isInteger(data.quantities[key]) || data.quantities[key] < 1 || data.quantities[key] > limit)) return `Specify a quantity between 1 and ${limit} for ${choice.toLowerCase()}.`;
   }
   const recurrenceError = validateRecurrence(data.recurrence);
   if (recurrenceError) return recurrenceError;
