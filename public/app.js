@@ -1,3 +1,17 @@
+const contactCopyStatus = document.querySelector('#contact-copy-status');
+for (const button of document.querySelectorAll('[data-copy-email]')) {
+  button.addEventListener('click', async () => {
+    const email = button.dataset.copyEmail;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(email);
+      contactCopyStatus.textContent = `Copied ${email}. Paste it into your email app.`;
+    } catch {
+      contactCopyStatus.textContent = `Copy is unavailable in this browser. Select and copy the address above: ${email}`;
+    }
+  });
+}
+
 const embedded = new URLSearchParams(location.search).get('embed') === '1';
 if (embedded) {
   document.documentElement.classList.add('embedded');
