@@ -26,7 +26,7 @@ The app runs on port 3000 (`PORT` overrides it). `npm run dev` restarts on edits
    - Upper Elementary, Lower Elementary, City Students, Pre K and Nursery: Milyn Farrier (`milyn.farrier@newcitystc.church`) or Hope (`hope.varwig@newcitystc.church`).
    - Worship Center: Melvin (`melvin.anaya@newcitystc.church`) or Hope.
    - City Commons: Hospitality (`hospitality@newcitystc.church`) or Hope.
-   - Kitchen, Entire Building and Other: Hope.
+   - Kitchen alone, Entire Building and Other: Hope. City Commons + optional Kitchen is one Hospitality-or-Hope approval group.
 3. Either assigned person can approve a room group. Requests spanning different groups require coverage of each group; Hope can approve all groups. For example, a classroom + Worship Center request can be approved by Hope alone, or by Milyn and Melvin together. Each person receives one email even when multiple rooms are selected. Opening a link does not approve.
 4. Once all selected room groups are approved, the app notifies `facilities@newcitystc.church` (Darrell) , `mark.forbes@newcitystc.church` (Mark), and `DaijaO2006@gmail.com` (Daija Owens, facilities/reset coordination; requester performs setup). Duplicate or late approvals do not resend completed notifications.
 5. Once all room groups are approved, the app creates one event in the configured **shared Google Calendar** and emails Darrell, Mark, and Daija the outcome. Calendar errors leave the request approved with an explicit pending-calendar message; retry from the same approval link. Retries use the same Google event ID to avoid duplicates. Google Calendar does not create Planning Center reservations.
@@ -113,15 +113,21 @@ Final approval checks and event inserts are serialized within the single Node pr
 
 ## Signed building-use agreement
 
-New requests require the displayed current agreement, a typed full-name signature, and explicit electronic-signature consent. The server records the terms snapshot, agreement version, signer, UTC timestamp, and exact uploaded fee document with its SHA-256. Client-supplied terms or timestamps are not accepted. Update `AGREEMENT_VERSION` whenever changing terms or the fee document. Existing signed snapshots must remain unchanged.
+New requests require the displayed current agreement, a typed full-name signature, and explicit electronic-signature consent. The server records the terms snapshot, agreement version, signer, UTC timestamp, and exact fee document reviewed at signing with its SHA-256. Client-supplied terms or timestamps are not accepted. Update `AGREEMENT_VERSION` whenever changing terms or the fee document. Existing signed snapshots must remain unchanged.
 
 The contract includes requester-provided setup/teardown/cleaning, all supplied kitchen and room cleanup duties, a $50 lost-key fee, and responsibility for damage charges determined from repair/replacement costs without a fixed damage amount. Fees are not automatically calculated or charged: the uploaded sheet has hourly and flat-rate sections, and staff must confirm the applicable charges.
 
-At submission, the requester receives the signed agreement PDF and original fee-sheet PDF with a clear pending-approval notice. Approval emails to staff also include these documents. After full approval, the requester receives another copy and room-reset instructions. Completed requester/staff notifications are tracked separately to avoid resending completed messages on retry. Signed agreements are never served through public URLs. Keep the record store private and persistent; email attachments do not replace durable approval-record storage. Firestore remains unfinished.
+At submission, the requester receives the signed agreement PDF and fee-sheet PDF reviewed at signing with a clear pending-approval notice. Approval emails to staff also include these documents. After full approval, the requester receives another copy and room-reset instructions. Completed requester/staff notifications are tracked separately to avoid resending completed messages on retry. Signed agreements are never served through public URLs. Keep the record store private and persistent; email attachments do not replace durable approval-record storage. Firestore remains unfinished.
 
-### Room reset photos — still needed
+### Room reset photos
 
-The actual room and kitchen reference pictures have not been supplied. No placeholder/stock photos are used or described as attached. Requester emails explicitly tell users to obtain reset instructions from facilities until photos are configured. Add church-supplied files and map exact room names in `RESET_PHOTOS` in `agreement.js`, with `{path:'./public/assets/room-reset.jpg',filename:'Room-reset.jpg',type:'image/jpeg'}`. `Entire Building` receives every configured room photo. Relevant photos are sent as attachments with the contract copies. Do not put access codes in photos or in the public fee document.
+Three church-supplied HEIC photographs are retained as JPEG references: City Commons layout, City Commons chair storage, and kitchen. Original Reset files are authoritative. Separately labelled Enhanced Visual Aid copies use AI-assisted lighting/clarity edits and may change small details; they are not the definitive reset references. The originals remain preserved in the upload workspace and the original-layout JPEG assets remain alongside enhanced copies.
+
+`RESET_PHOTOS` in `agreement.js` maps room names to attachment arrays. City Commons alone receives its two originals and two enhanced views, not the kitchen images. Selecting Kitchen adds the kitchen original and enhanced view; Entire Building receives all photos. No photos are exposed through public application routes. Kitchen-specific cleanup duties apply only when the kitchen is used. City Commons + Kitchen can be approved by Hospitality or Hope; Kitchen alone still routes to Hope. Existing signed terms stay snapshotted, while new requests use agreement version `2026-10-20-v2`.
+
+### Expanded fee sheet
+
+`fees.json` preserves the existing supplied rates and adds Pre K, Upper Elementary, Lower Elementary and Nursery alongside the existing City Students row in both sections. New children’s-room prices are unconfirmed and explicitly say **Contact church for pricing**. City Students retains $25/hour in the non-member section and $25 flat in the members/non-members section. Do not invent a rate for the new rooms. Run `node scripts/generate-fees.mjs` after an authorized rate update and bump the agreement version when changing the fee document. The generated PDF also records the existing $50 lost-key obligation, damage-cost responsibility, and requester setup/cleanup obligations. Each signed request keeps the exact fee bytes and hash reviewed at signing; later rate edits do not replace older signed copies.
 
 ### Lockbox code plan — not active
 

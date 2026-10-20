@@ -1,0 +1,13 @@
+{
+  "updated": "2026-10-20",
+  "hourlyNonMembers": [
+    ["Worship Center Room", 100], ["Sound Technician", 30], ["Slides Operator", 20], ["City Commons", 50],
+    ["City Students Room", 25], ["Pre K Room", null], ["Upper Elementary Room", null], ["Lower Elementary Room", null], ["Nursery Room", null],
+    ["Staff Office", 25], ["Entire Building", 300], ["Parking Lot Only", 50]
+  ],
+  "flatMembersAndNonMembers": [
+    ["Worship Center Room", 100], ["City Commons", 50], ["City Students Room", 25],
+    ["Pre K Room", null], ["Upper Elementary Room", null], ["Lower Elementary Room", null], ["Nursery Room", null],
+    ["Staff Office", 25], ["Entire Building", 250], ["Parking Lot Only", 50]
+  ]
+}

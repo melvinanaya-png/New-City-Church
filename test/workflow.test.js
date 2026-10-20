@@ -23,7 +23,7 @@ function decodeMime(raw, output={attachments:[]}) {
   const boundary=headers.match(/boundary="([^"]+)"/)?.[1];
   if(boundary){for(const part of body.split(`--${boundary}`).slice(1,-1))decodeMime(part.trim(),output);return output;}
   const content=Buffer.from(body.replace(/\r\n/g,''),'base64');
-  if(/Content-Disposition: attachment/i.test(headers))output.attachments.push({filename:headers.match(/filename="([^"]+)"/)?.[1],content});
+  if(/Content-Disposition: attachment/i.test(headers))output.attachments.push({filename:headers.match(/filename="([^"]+)"/)?.[1],content:headers.includes("image/")?Buffer.from(content.subarray(0,16)):content,byteLength:content.length});
   else output[headers.includes('text/html')?'html':'text']=content.toString();
   return output;
 }
@@ -372,7 +372,7 @@ test('requester receives a private signed PDF and fee document at submission and
   const receipt=requesterMessages[copies];assert.ok(receipt);
   assert.match(receipt.text,/still pending approval/);assert.match(receipt.text,/responsible for setup/);
   assert.ok(!receipt.text.includes('token='));assert.ok(!receipt.text.includes('lockbox code:'));
-  assert.equal(receipt.attachments.length,2);
+  assert.equal(receipt.attachments.length,4);
   assert.ok(receipt.attachments[0].content.subarray(0,4).equals(Buffer.from('%PDF')));
   assert.ok(receipt.attachments[0].filename.includes(id));
   const {readFile}=await import('node:fs/promises');
@@ -403,13 +403,37 @@ test('failed requester confirmation can retry without resending completed staff 
 });
 test('configured room photos are included as attachments without inventing references', async () => {
   const {RESET_PHOTOS,contractAttachments,signedAgreement}=await import('../agreement.js');
-  const record={...request,id:'photo-attachment-test',agreement:signedAgreement(request)};
+  const record={...request,rooms:['Nursery'],id:'photo-attachment-test',agreement:signedAgreement(request)};
   assert.equal((await contractAttachments(record)).length,2,'no photos are claimed when none are supplied');
-  RESET_PHOTOS.Kitchen={path:'./public/assets/new-city-logo.png',filename:'test-reference.png',type:'image/png'};
+  const previous=RESET_PHOTOS.Nursery;
+  RESET_PHOTOS.Nursery={path:'./public/assets/new-city-logo.png',filename:'test-reference.png',type:'image/png'};
   try {
     const attachments=await contractAttachments(record);assert.equal(attachments.length,3);
     assert.equal(attachments[2].filename,'test-reference.png');assert.equal(attachments[2].type,'image/png');
     assert.equal(attachments[2].content.subarray(1,4).toString(),'PNG');
-  }finally{delete RESET_PHOTOS.Kitchen;}
+  }finally{if(previous)RESET_PHOTOS.Nursery=previous;else delete RESET_PHOTOS.Nursery;}
+});
+test('City Commons photos exclude kitchen unless requested, and shared approval covers optional kitchen', async () => {
+  const {contractAttachments,signedAgreement,roomResetNote}=await import('../agreement.js');
+  const common={...request,rooms:['City Commons'],id:'commons-reference',agreement:signedAgreement(request)};
+  let attachments=await contractAttachments(common);
+  assert.equal(attachments.filter(a=>a.type==='image/jpeg').length,4);
+  assert.ok(!attachments.some(a=>a.filename.startsWith('Kitchen')));
+  assert.match(roomResetNote(common),/Kitchen use was not requested/);
+  const withKitchen={...common,rooms:['City Commons','Kitchen']};
+  attachments=await contractAttachments(withKitchen);
+  assert.equal(attachments.filter(a=>a.type==='image/jpeg').length,6);
+  assert.equal(attachments.filter(a=>a.filename.startsWith('Kitchen')).length,2);
+  assert.match(roomResetNote(withKitchen),/Kitchen use was requested/);
+  assert.equal(approvalGroupsFor(withKitchen.rooms).length,1);
+  assert.deepEqual(approvalGroupsFor(withKitchen.rooms)[0].approvers,['hospitality@newcitystc.church','hope.varwig@newcitystc.church']);
+});
+test('expanded fee sheet names every children’s room without inventing unconfirmed rates', async () => {
+  const {readFile}=await import('node:fs/promises');
+  const fees=JSON.parse(await readFile(new URL('../fees.json',import.meta.url),'utf8'));
+  for(const section of [fees.hourlyNonMembers,fees.flatMembersAndNonMembers]) {
+    assert.equal(section.find(([room])=>room==='City Students Room')[1],25);
+    for(const name of ['Pre K Room','Upper Elementary Room','Lower Elementary Room','Nursery Room'])assert.equal(section.find(([room])=>room===name)[1],null);
+  }
 });
 test.after(async () => {globalThis.fetch=realFetch;await new Promise(resolve => server.close(resolve)); await rm(dir,{recursive:true,force:true});});

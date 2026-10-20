@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { recurrenceSummary } from './recurrence.js';
 const root = fileURLToPath(new URL('.',import.meta.url));
 const fees = await readFile(root+'public/assets/building-usage-fees.pdf');
-export const AGREEMENT_VERSION = '2026-10-20-v1';
+export const AGREEMENT_VERSION = '2026-10-20-v2';
 export const AGREEMENT_TERMS = [
   'I will be personally present during all usage of the church facilities, including setup, decoration, the event, and teardown.',
   'My group is responsible for its own setup, decoration, teardown, cleaning, and restoring the room. The church does not provide setup or teardown services.',
@@ -15,12 +15,12 @@ export const AGREEMENT_TERMS = [
   'I will follow church policies and guidelines and leave every space I use clean and orderly.',
   'All tables must be cleaned, dried, and returned to the original room setup or storage.',
   'Chairs must be inspected for spills or damage and returned to the original room setup or storage.',
-  'All dishes, pots, pans, and utensils must be washed, dried, and returned to their proper storage places.',
+  'Kitchen use is optional with City Commons. I must select Kitchen if I intend to use it. If I use the kitchen, all dishes, pots, pans, and utensils I use must be washed, dried, and returned to their proper storage places.',
   'Stovetops must be wiped down if used.',
   'The oven must be wiped clean if used.',
   'The microwave must be cleaned of spills and spatters if used.',
-  'The kitchen floor must be swept.',
-  'All leftover food must be given away or disposed of. No food may be left in the kitchen.',
+  'If I use the kitchen, its floor must be swept.',
+  'If I use the kitchen, all leftover food must be given away or disposed of. No food may be left in the kitchen.',
   'Inside trash bags must be tied and taken to the dumpster.',
   'Trash cans must be relined.',
   'All lights must be turned off, including bathroom lights.',
@@ -56,21 +56,32 @@ export function contractPdf(record) {
     doc.end();
   });
 }
-// Add real, church-supplied reference photos here. Never substitute stock images.
-export const RESET_PHOTOS = {};
+// Original photos are the authoritative reset references; enhanced images are labelled visual aids.
+const photo = (file,filename) => ({path:`./public/assets/reset-photos/${file}`,filename,type:'image/jpeg'});
+export const RESET_PHOTOS = {
+  'City Commons':[
+    photo('city-commons-layout-original.jpg','City-Commons-Layout-Original-Reset.jpg'),
+    photo('city-commons-storage-original.jpg','City-Commons-Chair-Storage-Original-Reset.jpg'),
+    photo('city-commons-layout-enhanced.jpg','City-Commons-Layout-Enhanced-Visual-Aid.jpg'),
+    photo('city-commons-storage-enhanced.jpg','City-Commons-Chair-Storage-Enhanced-Visual-Aid.jpg')
+  ],
+  Kitchen:[photo('kitchen-original.jpg','Kitchen-Original-Reset.jpg'),photo('kitchen-enhanced.jpg','Kitchen-Enhanced-Visual-Aid.jpg')]
+};
+function photosFor(record) {
+  const rooms=record.rooms.includes('Entire Building')?Object.keys(RESET_PHOTOS):record.rooms;
+  return rooms.flatMap(room=>RESET_PHOTOS[room] ? (Array.isArray(RESET_PHOTOS[room])?RESET_PHOTOS[room]:[RESET_PHOTOS[room]]) : []);
+}
 export async function contractAttachments(record) {
-  if(!record.agreement) return [];
+  if(!record.agreement)return [];
   const pdf=await contractPdf(record);
   const attachments=[{filename:`New-City-Signed-Agreement-${record.id}.pdf`,type:'application/pdf',content:pdf},{filename:'Building-Usage-Fees.pdf',type:'application/pdf',content:Buffer.from(record.agreement.feesDocumentBase64,'base64')}];
-  const rooms=record.rooms.includes('Entire Building')?Object.keys(RESET_PHOTOS):record.rooms;
-  for(const room of rooms) {
-    const photo=RESET_PHOTOS[room];
-    if(photo) attachments.push({filename:photo.filename,type:photo.type,content:await readFile(new URL(photo.path,import.meta.url))});
-  }
+  for(const reference of photosFor(record))attachments.push({filename:reference.filename,type:reference.type,content:await readFile(new URL(reference.path,import.meta.url))});
   return attachments;
 }
 export function roomResetNote(record) {
   const rooms=record.rooms.includes('Entire Building')?Object.keys(RESET_PHOTOS):record.rooms;
   const available=rooms.filter(room=>RESET_PHOTOS[room]);
-  return available.length ? `Room reset reference photos are attached for: ${available.join(', ')}. Return the spaces to the pictured condition. Ask the facilities team for instructions for any other space.` : 'Room and kitchen reference photos have not been supplied yet. Please obtain the required room reset instructions from the facilities team before use.';
+  const kitchen=rooms.includes('Kitchen');
+  const references=available.length ? `Reset photos are attached for: ${available.join(', ')}. Files marked Original Reset are the authoritative references. Enhanced Visual Aid files have adjusted lighting and may differ in small details; follow the original photos when restoring furniture and equipment. Ask facilities for reset instructions for any other rooms.` : 'Please obtain the required room reset instructions from facilities before use.';
+  return references+'\n'+(kitchen ? 'Kitchen use was requested. Restore the kitchen to its original condition and complete the kitchen cleanup duties in your agreement.' : 'Kitchen use was not requested. City Commons does not automatically reserve the kitchen; select Kitchen in a new request if you intend to use it. Kitchen-specific cleanup applies only if the kitchen is used.');
 }
