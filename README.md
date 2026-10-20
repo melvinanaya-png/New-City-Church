@@ -123,7 +123,7 @@ At submission, the requester receives the signed agreement PDF and fee-sheet PDF
 
 Three church-supplied HEIC photographs are retained as JPEG references: City Commons layout, City Commons chair storage, and kitchen. Original Reset files are authoritative. Separately labelled Enhanced Visual Aid copies use AI-assisted lighting/clarity edits and may change small details; they are not the definitive reset references. The originals remain preserved in the upload workspace and the original-layout JPEG assets remain alongside enhanced copies.
 
-`RESET_PHOTOS` in `agreement.js` maps room names to attachment arrays. City Commons alone receives its two originals and two enhanced views, not the kitchen images. Selecting Kitchen adds the kitchen original and enhanced view; Entire Building receives all photos. No photos are exposed through public application routes. Kitchen-specific cleanup duties apply only when the kitchen is used. City Commons + Kitchen can be approved by Hospitality or Hope; Kitchen alone still routes to Hope. Existing signed terms stay snapshotted, while new requests use agreement version `2026-10-20-v5`.
+`RESET_PHOTOS` in `agreement.js` maps room names to attachment arrays. City Commons alone receives its two originals and two enhanced views, not the kitchen images. Selecting Kitchen adds the kitchen original and enhanced view; Entire Building receives all photos. No photos are exposed through public application routes. Kitchen-specific cleanup duties apply only when the kitchen is used. City Commons + Kitchen can be approved by Hospitality or Hope; Kitchen alone still routes to Hope. Existing signed terms stay snapshotted, while new requests use agreement version `2026-10-20-v6`.
 
 ### Expanded fee sheet
 
@@ -137,4 +137,6 @@ Send approved users access instructions separately for the actual visit date, ne
 
 Setup inventory limits per request: 6 round tables, 8 rectangular tables, and 60 chairs. The browser and server enforce these maxima; setup remains optional. These are per-request limits, not pooled inventory reservations across different rooms.
 
-Event setup policy: Daija is no longer a notification recipient. Outside/community events supply their own setup, teardown and cleanup. Internal New City events are identified by the Event type field; church staff arrange setup help separately, and the form does not automatically assign or contact a setup volunteer. Staff approval notifications go only to Darrell and Mark. Existing signed contracts retain their original terms.
+Event setup policy: Daija is not a notification recipient. Groups handle setup and cleanup unless the church confirms assistance separately; staff arrange any help outside the form. Approved staff notifications go only to Darrell and Mark.
+
+The event-type question has been removed at the user’s request. New requests do not classify internal/outside events. The simplified setup policy says groups handle setup, teardown and cleanup unless the church separately confirms assistance; the form never assigns a setup volunteer. Staff coordinate any church-event help outside the form.

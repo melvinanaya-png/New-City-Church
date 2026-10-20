@@ -52,7 +52,6 @@ export function validate(data) {
   for (const [choice, key, limit] of [['Round Tables','roundTables',6], ['Rectangular Tables','rectangularTables',8], ['Chairs','chairs',60]]) {
     if (data.setup.includes(choice) && (!Number.isInteger(data.quantities[key]) || data.quantities[key] < 1 || data.quantities[key] > limit)) return `Specify a quantity between 1 and ${limit} for ${choice.toLowerCase()}.`;
   }
-  if(data.eventType !== undefined && !['external','internal'].includes(data.eventType))return 'Choose an internal or outside event type.';
   const recurrenceError = validateRecurrence(data.recurrence);
   if (recurrenceError) return recurrenceError;
   if (data.agree !== true) return 'Please acknowledge the agreement and that your request requires approval.';
@@ -149,8 +148,7 @@ export const server = http.createServer(async (req, res) => {
       const id = randomUUID();
       const approvalGroups = approvalGroupsFor(data.rooms);
       const tokens = [...new Set(approvalGroups.flatMap(group => group.approvers))].map(email => ({email,token:randomBytes(32).toString('hex')}));
-      const record = {id, approvalGroups, approvals:tokens.map(({email,token}) => ({email,tokenHash:hash(token),approvedAt:null,notification:'pending'})), expiresAt: Date.now() + 14 * 86400000, ...Object.fromEntries(['name','email','title','ministry','date','start','end','guests','notes','rooms','roomsOther','equipment','equipmentOther','setup','quantities','recurrence','eventType'].map(k => [k, data[k]])), status: 'pending', submittedAt: new Date().toISOString()};
-      record.eventType ||= 'external';
+      const record = {id, approvalGroups, approvals:tokens.map(({email,token}) => ({email,tokenHash:hash(token),approvedAt:null,notification:'pending'})), expiresAt: Date.now() + 14 * 86400000, ...Object.fromEntries(['name','email','title','ministry','date','start','end','guests','notes','rooms','roomsOther','equipment','equipmentOther','setup','quantities','recurrence'].map(k => [k, data[k]])), status: 'pending', submittedAt: new Date().toISOString()};
       record.agreement = signedAgreement(data);
       record.requesterReceiptNotification = 'pending';
       record.avRequested = needsAvNotification(data.equipment);

@@ -362,7 +362,7 @@ test('agreement requires signature, current terms and electronic consent', () =>
   assert.match(validate({...request,signatureConsent:false}),/electronically/);
   assert.match(validate({...request,agreementVersion:'old'}),/agreement has changed/);
   assert.ok(AGREEMENT_TERMS.some(term=>term.includes('$50 lost-key fee')));
-  assert.ok(AGREEMENT_TERMS.some(term=>term.includes('church does not provide setup')));
+  assert.ok(AGREEMENT_TERMS.some(term=>term.includes('does not automatically request or assign setup help')));
   assert.ok(AGREEMENT_TERMS.some(term=>term.includes('not a fixed amount')));
 });
 test('requester receives a private signed PDF and fee document at submission and after approval', async () => {
@@ -442,16 +442,16 @@ test('setup quantities accept each inventory limit and reject amounts above it',
     assert.match(validate({...request,setup:[choice],quantities:{[key]:limit+1}}),new RegExp(`between 1 and ${limit}`));
   }
 });
-test('internal setup is coordinated separately and never adds a setup recipient', async () => {
+test('setup is arranged separately without an event classification question', async () => {
   const {setupResponsibility}=await import('../setup-policy.js');
-  assert.match(setupResponsibility({eventType:'internal'}),/church staff will arrange setup help separately/);
-  assert.match(setupResponsibility({eventType:'external'}),/requester is responsible/);
+  assert.match(setupResponsibility({}),/unless the church has confirmed assistance separately/);
+  const html=await (await fetch(base)).text();assert.ok(!html.includes('name="eventType"'));
   const before=messages.length;
-  const response=await post('/api/requests',{...request,eventType:'internal'});assert.equal(response.status,201);
-  const {id}=await response.json();assert.match(messages[before].text,/Internal church event/);
+  const response=await post('/api/requests',request);assert.equal(response.status,201);
+  const {id}=await response.json();assert.match(messages[before].text,/confirmed assistance separately/);
   assert.equal((await post('/api/approve',{id,token:tokenFrom(messages[before])})).status,200);
   assert.deepEqual(messages.at(-1).to,['facilities@newcitystc.church','mark.forbes@newcitystc.church']);
-  assert.match(requesterMessages.at(-1).text,/setup help separately/);
+  assert.match(requesterMessages.at(-1).text,/confirmed assistance separately/);
   assert.ok(!messages.some(message=>message.to.some(email=>email.toLowerCase()==='daijao2006@gmail.com')));
 });
 test.after(async () => {globalThis.fetch=realFetch;await new Promise(resolve => server.close(resolve)); await rm(dir,{recursive:true,force:true});});

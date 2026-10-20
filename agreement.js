@@ -6,10 +6,10 @@ import { fileURLToPath } from 'node:url';
 import { recurrenceSummary } from './recurrence.js';
 const root = fileURLToPath(new URL('.',import.meta.url));
 const fees = await readFile(root+'public/assets/building-usage-fees.pdf');
-export const AGREEMENT_VERSION = '2026-10-20-v5';
+export const AGREEMENT_VERSION = '2026-10-20-v6';
 export const AGREEMENT_TERMS = [
   'I will be personally present during all usage of the church facilities, including setup, decoration, the event, and teardown.',
-  'For outside events, my group is responsible for setup, decoration, teardown, cleaning, and restoring the room; the church does not provide setup services. For internal church events, church staff will arrange setup help separately. This form does not assign a setup volunteer; I will coordinate cleanup and room restoration with the church.',
+  'My group is responsible for setup, decoration, teardown, cleaning, and restoring the room unless the church has confirmed assistance separately. This form does not automatically request or assign setup help.',
   'Upon approval of my facilities use request, I will provide any fees required by the church. I have reviewed Building Usage Fees; the church will confirm the applicable charges before use.',
   'I am responsible for damage to church facilities, equipment, or property resulting from my group’s use. Damage charges are not a fixed amount in this agreement; the church will determine the amount based on the damage and repair or replacement costs.',
   'If I lose the building key, I will pay a $50 lost-key fee. I will return the key as instructed and will not share the key or access code with unauthorized people.',
@@ -48,7 +48,7 @@ export function contractPdf(record) {
     doc.font(root+'public/assets/fonts/Barlow-Regular.ttf');
     doc.fillColor('#4f8cad').fontSize(23).text('NEW CITY CHURCH');
     doc.fillColor('#333132').fontSize(18).text('Building Use Agreement');doc.moveDown();
-    doc.fontSize(11).text(`Reference: ${record.id}\nEvent: ${record.title}\nRequester: ${record.name} (${record.email})\nFirst date: ${record.date}, ${record.start}–${record.end} Central Time\nSchedule: ${recurrenceSummary(record.date,record.recurrence)}\nEvent type: ${record.eventType === 'internal' ? 'Internal New City event' : 'Outside event'}\nRooms: ${(record.rooms || []).join(', ')}\nAgreement version: ${record.agreement.version}`);
+    doc.fontSize(11).text(`Reference: ${record.id}\nEvent: ${record.title}\nRequester: ${record.name} (${record.email})\nFirst date: ${record.date}, ${record.start}–${record.end} Central Time\nSchedule: ${recurrenceSummary(record.date,record.recurrence)}\n${record.eventType ? `Event type: ${record.eventType === 'internal' ? 'Internal New City event' : 'Outside event'}\n` : ''}Rooms: ${(record.rooms || []).join(', ')}\nAgreement version: ${record.agreement.version}`);
     doc.moveDown();
     record.agreement.terms.forEach((term,index)=>{doc.fontSize(10).text(`${index+1}. ${term}`,{paragraphGap:7});});
     doc.moveDown();doc.fontSize(14).text('Electronic signature');
