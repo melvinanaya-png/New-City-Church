@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createRequestStore,firestoreAuthFromEnvironment,storageErrorMessage} from '../request-store.js';
+import {createRequestStore,firestoreAuthFromEnvironment,storageErrorMessage,diagnoseFirestoreOAuth} from '../request-store.js';
 const id='978db4dd-5b2e-4c8d-9dc9-87c4a0969157';
 const record={id,status:'pending',approvals:[{email:'approver@example.com',tokenHash:'private-hash',approvedAt:null}],agreement:{terms:['Signed terms'],feesDocumentBase64:Buffer.from('PDF snapshot').toString('base64')},optional:undefined};
 function database() {
@@ -78,4 +78,23 @@ test('Firestore diagnostics identify actionable failures without logging provide
   assert.match(storageErrorMessage({code:14}),/could not be reached/);
   assert.match(storageErrorMessage({cause:{response:{status:403,data:{error:{details:[{reason:'SERVICE_USAGE_DENIED'}]}}}}}),/Service Usage Consumer/);
   for(const error of [{message:secret},{code:7,message:secret},{cause:{message:secret}}])assert.equal(storageErrorMessage(error).includes(secret),false);
+});
+
+test('Firestore OAuth diagnostics preserve structured denial reasons through a read-only probe',async()=>{
+  const authClient={getAccessToken:async()=>({token:'test-access'})};
+  let calls=0;
+  const probe=async(url,options)=>{
+    calls++;
+    assert.equal(url,'https://firestore.googleapis.com/v1/projects/test-project/databases/(default)/documents:batchGet');
+    assert.equal(options.headers.Authorization,'Bearer test-access');
+    assert.deepEqual(JSON.parse(options.body),{documents:['projects/test-project/databases/(default)/documents/buildingRequests/_connection_check']});
+    return new Response(JSON.stringify({error:{message:'PRIVATE_PROVIDER_MESSAGE',details:[{reason:'ACCESS_TOKEN_SCOPE_INSUFFICIENT'}]}}),{status:403});
+  };
+  await assert.rejects(diagnoseFirestoreOAuth(authClient,'test-project',probe),error=>{
+    assert.match(storageErrorMessage(error),/lacks Firestore permission/);
+    assert.equal(JSON.stringify(error).includes('PRIVATE_PROVIDER_MESSAGE'),false);
+    return true;
+  });
+  assert.equal(calls,1);
+  await diagnoseFirestoreOAuth(authClient,'test-project',async()=>new Response('[{"missing":"probe"}]',{status:200}));
 });

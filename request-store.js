@@ -46,7 +46,17 @@ export function createRequestStore({backend='file', directory, projectId, creden
     },
     async check() {
       // This read checks credentials/database access without creating test records.
-      if(backend==='firestore')await client.collection('buildingRequests').doc('_connection_check').get();
+      if(backend==='firestore') {
+        try {await client.collection('buildingRequests').doc('_connection_check').get();}
+        catch(error) {
+          // Some SDK REST errors discard Google's structured reason. Retrieve it
+          // with the same identity and a read-only request, never logging bodies.
+          if(authClient) {
+            await diagnoseFirestoreOAuth(authClient,projectId);
+          }
+          throw error;
+        }
+      }
       return backend==='firestore'?'Firestore read access verified. Writes still require a live submission test.':'Local files only; storage is not durable on Render Free.';
     }
   };
@@ -85,4 +95,20 @@ export function storageErrorMessage(error) {
   if(chain.some(item=>item.code===8 || item.code===429 || item.response?.status===429))return 'Firestore quota or rate limit reached. Check Google Cloud quotas before retrying.';
   if(chain.some(item=>[4,14,'ENOTFOUND','EAI_AGAIN','ECONNRESET'].includes(item.code)))return 'Firestore could not be reached or timed out. Check connectivity and retry.';
   return 'Firestore check failed without a recognized reason. Verify project ID, database (default), datastore scope and the authorizing user’s IAM access. No local-file fallback was used.';
+}
+
+export async function diagnoseFirestoreOAuth(authClient,projectId,fetchImpl=fetch) {
+  const {token}=await authClient.getAccessToken();
+  if(!token)throw Object.assign(new Error('Google authorization unavailable.'),{code:16});
+  const database=`projects/${projectId}/databases/(default)`;
+  const response=await fetchImpl(`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents:batchGet`,{
+    method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
+    body:JSON.stringify({documents:[`${database}/documents/buildingRequests/_connection_check`]}),
+    signal:AbortSignal.timeout(15000)
+  });
+  if(response.ok)return;
+  let payload;try{payload=await response.json();}catch{}
+  const details=Array.isArray(payload?.error?.details)?payload.error.details:[];
+  // Keep only structural metadata, never the provider's message or response body.
+  throw {code:response.status,statusDetails:details.map(detail=>({reason:detail.reason}))};
 }
