@@ -2,13 +2,15 @@ import {readFile, mkdir, writeFile, rename, unlink} from 'node:fs/promises';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {Firestore} from '@google-cloud/firestore';
+import {UserRefreshClient} from 'google-auth-library';
 
 const validId = id => /^[0-9a-f-]{36}$/.test(id);
-export function createRequestStore({backend='file', directory, projectId, credentials, client}={}) {
+export function createRequestStore({backend='file', directory, projectId, credentials, authClient, client}={}) {
   if (!['file','firestore'].includes(backend)) throw new Error('Invalid STORAGE_BACKEND.');
   if (backend==='firestore' && !client) {
-    if (!projectId || !credentials?.client_email || !credentials?.private_key || credentials.project_id!==projectId) throw new Error('Firestore requires a matching project and service account.');
-    client=new Firestore({projectId,credentials,preferRest:true});
+    if (!projectId) throw new Error('Firestore requires FIRESTORE_PROJECT_ID.');
+    if (!authClient && (!credentials?.client_email || !credentials?.private_key || credentials.project_id!==projectId)) throw new Error('Firestore requires a matching project and service account.');
+    client=new Firestore({projectId,...(authClient?{authClient}:{credentials}),preferRest:true});
   }
   function document(id) {
     if(!validId(id))throw new Error('Invalid request ID.');
@@ -49,12 +51,18 @@ export function createRequestStore({backend='file', directory, projectId, creden
     }
   };
 }
+// Explicit credentials only: never silently adopt unrelated workspace ADC.
+export function firestoreAuthFromEnvironment(env=process.env) {
+  const mode=env.FIRESTORE_AUTH_MODE || (env.FIRESTORE_SERVICE_ACCOUNT_JSON?'service-account':'google-oauth');
+  if(mode==='google-oauth') {
+    if(!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.GOOGLE_REFRESH_TOKEN) throw new Error('Firestore Google authorization requires the existing GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REFRESH_TOKEN.');
+    return {authClient:new UserRefreshClient(env.GOOGLE_CLIENT_ID,env.GOOGLE_CLIENT_SECRET,env.GOOGLE_REFRESH_TOKEN)};
+  }
+  if(mode!=='service-account')throw new Error('Invalid FIRESTORE_AUTH_MODE.');
+  try{return {credentials:JSON.parse(env.FIRESTORE_SERVICE_ACCOUNT_JSON || '')};}
+  catch{throw new Error('Set FIRESTORE_SERVICE_ACCOUNT_JSON securely in Render.');}
+}
 export function requestStoreFromEnvironment(directory) {
   const backend=process.env.STORAGE_BACKEND || 'file';
-  let credentials;
-  if(backend==='firestore') {
-    try{credentials=JSON.parse(process.env.FIRESTORE_SERVICE_ACCOUNT_JSON || '');}
-    catch{throw new Error('Set FIRESTORE_SERVICE_ACCOUNT_JSON securely in Render.');}
-  }
-  return createRequestStore({backend,directory,projectId:process.env.FIRESTORE_PROJECT_ID,credentials});
+  return createRequestStore({backend,directory,projectId:process.env.FIRESTORE_PROJECT_ID,...(backend==='firestore'?firestoreAuthFromEnvironment():{})});
 }
