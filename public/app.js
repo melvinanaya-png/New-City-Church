@@ -108,6 +108,7 @@ form.addEventListener('submit', async event => {
   data.quantities = Object.fromEntries(['roundTables', 'rectangularTables', 'chairs'].filter(key => fields.has(key)).map(key => [key, Number(fields.get(key))]));
   data.roomsOther = fields.get('roomsOther') || ''; data.equipmentOther = fields.get('equipmentOther') || '';
   data.agree = fields.has('agree');
+  data.signatureConsent = fields.has('signatureConsent');
   data.recurrence = fields.get('repeat') === 'none' ? null : {frequency:fields.get('repeat') === 'monthly' ? 'monthly' : 'weekly',interval:fields.get('repeat') === 'biweekly' ? 2 : 1,count:Number(fields.get('occurrences'))};
   if(data.end <= data.start) {result.textContent = 'Please choose an end time after the start time.'; result.focus(); return;}
   submit.disabled = true; submit.textContent = 'Sending your request…'; result.textContent = ''; result.className = '';
@@ -115,7 +116,7 @@ form.addEventListener('submit', async event => {
     const response = await fetch('/api/requests', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
     const body = await response.json();
     if(!response.ok) throw new Error(body.error || 'We could not send your request.');
-    result.className = 'success'; result.textContent = `Request sent to your room approvers! Your reference is ${body.id}. The team will review your plans and contact you. Your event is not yet confirmed or added to the calendar.`;
+    result.className = 'success'; result.textContent = `Request sent to your room approvers! Your reference is ${body.id}. A copy of your signed agreement and fee sheet has been sent to your email. Your group is responsible for setup and cleanup. The team will review your plans. Your event is not yet confirmed or added to the calendar.`;
     form.reset(); updateSelections(); queueAvailability();
   } catch(error) {result.textContent = error.message === 'Failed to fetch' ? 'Connection interrupted. Please contact the facilities team before retrying to avoid a duplicate request.' : error.message;}
   finally {submit.disabled = false; submit.innerHTML = 'Send my request <span>↗</span>';result.focus();}

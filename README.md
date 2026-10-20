@@ -1,6 +1,6 @@
 # New City Church · Building requests
 
-A responsive building-request page, using Node.js 22+ with no third-party runtime dependencies.
+A responsive building-request page, using Node.js 22+ and pinned PDFKit dependencies for signed PDF copies.
 
 ## Branding and form fields
 
@@ -13,6 +13,7 @@ Room request and equipment needs are required multi-select groups. Tables and ch
 From `/workspace/New-City-Church`:
 
 ```sh
+npm ci --ignore-scripts
 npm start
 ```
 
@@ -27,7 +28,7 @@ The app runs on port 3000 (`PORT` overrides it). `npm run dev` restarts on edits
    - City Commons: Hospitality (`hospitality@newcitystc.church`) or Hope.
    - Kitchen, Entire Building and Other: Hope.
 3. Either assigned person can approve a room group. Requests spanning different groups require coverage of each group; Hope can approve all groups. For example, a classroom + Worship Center request can be approved by Hope alone, or by Milyn and Melvin together. Each person receives one email even when multiple rooms are selected. Opening a link does not approve.
-4. Once all selected room groups are approved, the app notifies `facilities@newcitystc.church` (Darrell) , `mark.forbes@newcitystc.church` (Mark), and `DaijaO2006@gmail.com` (Daija Owens, setup coordinator). Duplicate or late approvals do not resend completed notifications.
+4. Once all selected room groups are approved, the app notifies `facilities@newcitystc.church` (Darrell) , `mark.forbes@newcitystc.church` (Mark), and `DaijaO2006@gmail.com` (Daija Owens, facilities/reset coordination; requester performs setup). Duplicate or late approvals do not resend completed notifications.
 5. Once all room groups are approved, the app creates one event in the configured **shared Google Calendar** and emails Darrell, Mark, and Daija the outcome. Calendar errors leave the request approved with an explicit pending-calendar message; retry from the same approval link. Retries use the same Google event ID to avoid duplicates. Google Calendar does not create Planning Center reservations.
 
 Approval links expire after 14 days and act as bearer credentials; do not forward them. Tokens are stored only as hashes, carried in URL fragments, and removed from the browser URL when the approval page loads. Approval records must survive restarts for the links to work. Render Free currently has no durable storage configured; it remains unsuitable for real requests until storage is connected.
@@ -108,3 +109,22 @@ New calendar entries store structured room metadata. Existing app events are rec
 Google expands existing recurring bookings, and the app expands requested weekly/biweekly/monthly dates in America/Chicago, including DST. The whole calendar result set is paginated; incomplete reads block booking. All-day events also block their rooms. Pending approvals for an existing calendar request ignore that request's own event to preserve safe retry behavior.
 
 Final approval checks and event inserts are serialized within the single Node process. Google Calendar itself does not enforce room exclusivity: simultaneous manual edits, other integrations, or multiple app instances can bypass this process-level lock. Use the form as the booking entry point and keep one app process; durable storage and distributed coordination are still needed before broader production use. Firestore storage remains unfinished.
+
+
+## Signed building-use agreement
+
+New requests require the displayed current agreement, a typed full-name signature, and explicit electronic-signature consent. The server records the terms snapshot, agreement version, signer, UTC timestamp, and exact uploaded fee document with its SHA-256. Client-supplied terms or timestamps are not accepted. Update `AGREEMENT_VERSION` whenever changing terms or the fee document. Existing signed snapshots must remain unchanged.
+
+The contract includes requester-provided setup/teardown/cleaning, all supplied kitchen and room cleanup duties, a $50 lost-key fee, and responsibility for damage charges determined from repair/replacement costs without a fixed damage amount. Fees are not automatically calculated or charged: the uploaded sheet has hourly and flat-rate sections, and staff must confirm the applicable charges.
+
+At submission, the requester receives the signed agreement PDF and original fee-sheet PDF with a clear pending-approval notice. Approval emails to staff also include these documents. After full approval, the requester receives another copy and room-reset instructions. Completed requester/staff notifications are tracked separately to avoid resending completed messages on retry. Signed agreements are never served through public URLs. Keep the record store private and persistent; email attachments do not replace durable approval-record storage. Firestore remains unfinished.
+
+### Room reset photos — still needed
+
+The actual room and kitchen reference pictures have not been supplied. No placeholder/stock photos are used or described as attached. Requester emails explicitly tell users to obtain reset instructions from facilities until photos are configured. Add church-supplied files and map exact room names in `RESET_PHOTOS` in `agreement.js`, with `{path:'./public/assets/room-reset.jpg',filename:'Room-reset.jpg',type:'image/jpeg'}`. `Entire Building` receives every configured room photo. Relevant photos are sent as attachments with the contract copies. Do not put access codes in photos or in the public fee document.
+
+### Lockbox code plan — not active
+
+No codes are currently collected, stored, exposed, or automatically sent. Keep the changing access code out of the signed contract, calendar descriptions, and public page. Once the lockbox is installed and persistent storage is connected, maintain a private access-code record per valid period (`validFrom`, `validUntil`, and the confidential code). Monthly or every-other-month rotation can use the same model. Staff must change the physical lockbox code too; updating a database does not rotate the lockbox.
+
+Send approved users access instructions separately for the actual visit date, near the event, after any required fees have been confirmed. Recurring users need a current code for each applicable period, rather than a promise that one code works for the entire series. This delivery/scheduling workflow has not been built; staff must provide access instructions manually until then. Never ask users to post codes or credentials in chat.

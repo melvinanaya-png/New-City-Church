@@ -7,13 +7,26 @@ const dir = await mkdtemp(join(tmpdir(), 'newcity-tests-'));
 process.env.DATA_DIR = dir;
 delete process.env.GOOGLE_CALENDAR_ID;
 delete process.env.GOOGLE_CLIENT_ID; delete process.env.GOOGLE_CLIENT_SECRET; delete process.env.GOOGLE_REFRESH_TOKEN;
+const {AGREEMENT_VERSION, AGREEMENT_TERMS}=await import('../agreement.js');
 const {approvalGroupsFor} = await import('../approvals.js');
 const {server, validate} = await import('../server.js');
-const request = {name:'Test Person',email:'person@example.com',title:'Community dinner',ministry:'Community',date:'2026-12-12',start:'17:00',end:'19:00',rooms:['Kitchen'],roomsOther:'',equipment:['Other'],equipmentOther:'Whiteboard',setup:['Round Tables','Chairs'],quantities:{roundTables:5,chairs:25},guests:25,notes:'Accessible seating',agree:true};
+const request = {name:'Test Person',email:'person@example.com',title:'Community dinner',ministry:'Community',date:'2026-12-12',start:'17:00',end:'19:00',rooms:['Kitchen'],roomsOther:'',equipment:['Other'],equipmentOther:'Whiteboard',setup:['Round Tables','Chairs'],quantities:{roundTables:5,chairs:25},guests:25,notes:'Accessible seating',agree:true,signatureName:'Test Person',signatureConsent:true,agreementVersion:AGREEMENT_VERSION};
 await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 const realFetch = globalThis.fetch;
 const messages = [];
+const requesterMessages = [];
+let failRequesterApproval = false;
+function decodeMime(raw, output={attachments:[]}) {
+  const separator=raw.indexOf('\r\n\r\n');if(separator<0)return output;
+  const headers=raw.slice(0,separator),body=raw.slice(separator+4);
+  const boundary=headers.match(/boundary="([^"]+)"/)?.[1];
+  if(boundary){for(const part of body.split(`--${boundary}`).slice(1,-1))decodeMime(part.trim(),output);return output;}
+  const content=Buffer.from(body.replace(/\r\n/g,''),'base64');
+  if(/Content-Disposition: attachment/i.test(headers))output.attachments.push({filename:headers.match(/filename="([^"]+)"/)?.[1],content});
+  else output[headers.includes('text/html')?'html':'text']=content.toString();
+  return output;
+}
 const calendarEvents = new Map();
 let calendarFailure = false;
 let calendarInserts = 0;
@@ -44,15 +57,12 @@ globalThis.fetch = (url, options) => {
   if(url === 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send') {
     const raw = Buffer.from(JSON.parse(options.body).raw,'base64url').toString();
     const [headers,...parts] = raw.split('\r\n\r\n');
-    const boundary=headers.match(/boundary="([^"]+)"/)?.[1];
-    const decoded={};
-    if (boundary) {
-      for (const part of parts.join('\r\n\r\n').split(`--${boundary}`).slice(1,-1)) {
-        const [partHeaders,...encoded]=part.trim().split('\r\n\r\n');
-        decoded[partHeaders.includes('text/html')?'html':'text']=Buffer.from(encoded.join('\r\n\r\n').replace(/\r\n/g,''),'base64').toString();
-      }
-    } else decoded.text=Buffer.from(parts.join('\r\n\r\n').replace(/\r\n/g,''),'base64').toString();
-    messages.push({to:headers.match(/^To: (.+)$/m)[1].trim().split(', '),from:headers.match(/^From: (.+)$/m)[1].trim(),...decoded});
+    const decoded=decodeMime(raw);
+    const message={to:headers.match(/^To: (.+)$/m)[1].trim().split(', '),from:headers.match(/^From: (.+)$/m)[1].trim(),...decoded};
+    if(message.to.includes('person@example.com')) {
+      requesterMessages.push(message);
+      if(failRequesterApproval && message.text.includes('received all required room approvals'))return Promise.resolve(new Response('{}',{status:503}));
+    } else messages.push(message);
     return Promise.resolve(new Response('{}',{status:200}));
   }
   return realFetch(url,options);
@@ -161,6 +171,7 @@ test('Google Calendar insert waits for final room coverage and uses Central Time
   assert.deepEqual(event.end,{dateTime:'2026-12-12T19:00:00',timeZone:'America/Chicago'});
   assert.match(event.description,/Round Tables: 5, Chairs: 25/);
   assert.equal(event.recurrence,undefined,'one-time requests do not become recurring');
+  assert.ok(!event.description.includes('Agreement:'),'signature metadata stays out of shared calendar');
   assert.equal(event.attendees,undefined,'no meeting invitations sent to leaders');
   assert.equal(calendarEvents.size,count+1);
   assert.match(messages.at(-1).text,/Added to the shared/);
@@ -345,5 +356,60 @@ test('availability reads later calendar pages and cannot be bypassed by a submit
   const response=await post('/api/requests',{...request,id:'pretend-own-id'});
   assert.equal(response.status,409);assert.equal(messages.length,before);
   availabilityPages=null;
+});
+test('agreement requires signature, current terms and electronic consent', () => {
+  assert.match(validate({...request,signatureName:''}),/full name/);
+  assert.match(validate({...request,signatureConsent:false}),/electronically/);
+  assert.match(validate({...request,agreementVersion:'old'}),/agreement has changed/);
+  assert.ok(AGREEMENT_TERMS.some(term=>term.includes('$50 lost-key fee')));
+  assert.ok(AGREEMENT_TERMS.some(term=>term.includes('church does not provide setup')));
+  assert.ok(AGREEMENT_TERMS.some(term=>term.includes('not a fixed amount')));
+});
+test('requester receives a private signed PDF and fee document at submission and after approval', async () => {
+  const before=messages.length, copies=requesterMessages.length;
+  const response=await post('/api/requests',request);assert.equal(response.status,201);
+  const {id}=await response.json();
+  const receipt=requesterMessages[copies];assert.ok(receipt);
+  assert.match(receipt.text,/still pending approval/);assert.match(receipt.text,/responsible for setup/);
+  assert.ok(!receipt.text.includes('token='));assert.ok(!receipt.text.includes('lockbox code:'));
+  assert.equal(receipt.attachments.length,2);
+  assert.ok(receipt.attachments[0].content.subarray(0,4).equals(Buffer.from('%PDF')));
+  assert.ok(receipt.attachments[0].filename.includes(id));
+  const {readFile}=await import('node:fs/promises');
+  const record=JSON.parse(await readFile(join(dir,id+'.json'),'utf8'));
+  assert.equal(record.agreement.signedName,'Test Person');assert.equal(record.agreement.electronicConsent,true);
+  assert.equal(record.agreement.version,AGREEMENT_VERSION);assert.equal(record.agreement.terms.length,AGREEMENT_TERMS.length);assert.ok(record.agreement.signedAt);
+  assert.deepEqual(receipt.attachments[1].content,Buffer.from(record.agreement.feesDocumentBase64,'base64'));
+  const token=tokenFrom(messages[before]);
+  assert.equal((await post('/api/approve',{id,token})).status,200);
+  assert.equal(requesterMessages.length,copies+2);assert.match(requesterMessages.at(-1).text,/received all required room approvals/);
+  await post('/api/approve',{id,token});assert.equal(requesterMessages.length,copies+2,'repeat approval does not resend the requester copy');
+});
+test('public form displays all agreement terms and fee sheet before signing', async () => {
+  const response=await fetch(base);const html=await response.text();
+  assert.match(html,/name="signatureName" required/);assert.match(html,/name="signatureConsent" type="checkbox" required/);
+  assert.ok(!html.includes('<!-- AGREEMENT_TERMS -->'));assert.ok(html.includes('$50 lost-key fee'));
+  const fees=await fetch(base+'/assets/building-usage-fees.pdf');assert.equal(fees.status,200);assert.equal(fees.headers.get('content-type'),'application/pdf');
+});
+test('failed requester confirmation can retry without resending completed staff notices', async () => {
+  const before=messages.length;
+  const {id}=await (await post('/api/requests',request)).json();const token=tokenFrom(messages[before]);
+  failRequesterApproval=true;
+  const first=await post('/api/approve',{id,token});assert.equal(first.status,502);
+  assert.match((await first.json()).error,/requester confirmation/);
+  const staff=messages.length;
+  failRequesterApproval=false;
+  const second=await post('/api/approve',{id,token});assert.equal(second.status,200);assert.equal(messages.length,staff);
+});
+test('configured room photos are included as attachments without inventing references', async () => {
+  const {RESET_PHOTOS,contractAttachments,signedAgreement}=await import('../agreement.js');
+  const record={...request,id:'photo-attachment-test',agreement:signedAgreement(request)};
+  assert.equal((await contractAttachments(record)).length,2,'no photos are claimed when none are supplied');
+  RESET_PHOTOS.Kitchen={path:'./public/assets/new-city-logo.png',filename:'test-reference.png',type:'image/png'};
+  try {
+    const attachments=await contractAttachments(record);assert.equal(attachments.length,3);
+    assert.equal(attachments[2].filename,'test-reference.png');assert.equal(attachments[2].type,'image/png');
+    assert.equal(attachments[2].content.subarray(1,4).toString(),'PNG');
+  }finally{delete RESET_PHOTOS.Kitchen;}
 });
 test.after(async () => {globalThis.fetch=realFetch;await new Promise(resolve => server.close(resolve)); await rm(dir,{recursive:true,force:true});});

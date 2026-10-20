@@ -11,3 +11,5 @@ select{display:block;width:100%;min-width:0;border:1px solid #d6dfe4;border-radi
 .availability-status{font-size:13px;line-height:1.6;background:#eef5f9;padding:12px;border-radius:6px;color:#355d73}.needs label:has(.room-availability:not(:empty)){display:grid;grid-template-columns:16px 1fr;background:#fff5ee;border-color:#d2b4a4;cursor:not-allowed}.room-availability{grid-column:2;font-size:11px;font-weight:400;color:#a94018}.room-availability:empty{display:none}
 
 .availability-retry{width:auto;font-size:13px;padding:10px 14px;margin-bottom:15px}
+
+.contract-section{margin-top:28px;border-top:1px solid var(--line);padding-top:8px}.contract-section>p a{font-size:14px;color:#355d73;text-underline-offset:3px}.contract-terms{background:#fcfaed;border:1px solid #e4e2d5;border-radius:8px;padding:14px 18px}.contract-terms ol{margin:0;padding-left:22px}.contract-terms li{font-size:14px;line-height:1.65;margin:10px 0}.contract-section input[name=signatureName]{font-family:Georgia,serif;font-style:italic;font-size:22px}
