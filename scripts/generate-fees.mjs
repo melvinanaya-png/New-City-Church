@@ -25,7 +25,7 @@ function table(title,rateLabel,rows) {
 }
 heading();let y=table('Room usage fees for non-members','Hourly rate',data.hourlyNonMembers);
 doc.fillColor('#68676b').fontSize(10).text('City Students, Pre K, Upper Elementary, Lower Elementary and Nursery are each $25 per hour for non-members. The church will confirm all applicable charges before payment.',48,y+18,{width:516});
-doc.addPage();heading();y=table('Usage fees for members and non-members','Flat rate',data.flatMembersAndNonMembers);
+doc.addPage();heading();y=table('Usage fees for members','Flat rate',data.flatMembers);
 doc.fillColor('#333132').fontSize(12).text('Additional responsibilities',48,y+22);
 doc.fontSize(10).text('Lost building key: $50. Damage charges are not a fixed fee; the church determines charges from the damage and repair or replacement costs.',48,y+43,{width:516});
 doc.text('Kitchen use is optional with City Commons. Select Kitchen if you intend to use it. Your group handles all setup, teardown, cleaning and room restoration.',48,y+82,{width:516});

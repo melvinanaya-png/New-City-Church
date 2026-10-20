@@ -431,7 +431,7 @@ test('City Commons photos exclude kitchen unless requested, and shared approval 
 test('fee sheet applies the confirmed $25 rate to every student and children’s room', async () => {
   const {readFile}=await import('node:fs/promises');
   const fees=JSON.parse(await readFile(new URL('../fees.json',import.meta.url),'utf8'));
-  for(const section of [fees.hourlyNonMembers,fees.flatMembersAndNonMembers]) {
+  for(const section of [fees.hourlyNonMembers,fees.flatMembers]) {
     assert.equal(section.find(([room])=>room==='City Students Room')[1],25);
     for(const name of ['Pre K Room','Upper Elementary Room','Lower Elementary Room','Nursery Room'])assert.equal(section.find(([room])=>room===name)[1],25);
   }

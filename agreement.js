@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { recurrenceSummary } from './recurrence.js';
 const root = fileURLToPath(new URL('.',import.meta.url));
 const fees = await readFile(root+'public/assets/building-usage-fees.pdf');
-export const AGREEMENT_VERSION = '2026-10-20-v3';
+export const AGREEMENT_VERSION = '2026-10-20-v4';
 export const AGREEMENT_TERMS = [
   'I will be personally present during all usage of the church facilities, including setup, decoration, the event, and teardown.',
   'My group is responsible for its own setup, decoration, teardown, cleaning, and restoring the room. The church does not provide setup or teardown services.',
