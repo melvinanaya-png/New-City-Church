@@ -428,12 +428,12 @@ test('City Commons photos exclude kitchen unless requested, and shared approval 
   assert.equal(approvalGroupsFor(withKitchen.rooms).length,1);
   assert.deepEqual(approvalGroupsFor(withKitchen.rooms)[0].approvers,['hospitality@newcitystc.church','hope.varwig@newcitystc.church']);
 });
-test('expanded fee sheet names every children’s room without inventing unconfirmed rates', async () => {
+test('fee sheet applies the confirmed $25 rate to every student and children’s room', async () => {
   const {readFile}=await import('node:fs/promises');
   const fees=JSON.parse(await readFile(new URL('../fees.json',import.meta.url),'utf8'));
   for(const section of [fees.hourlyNonMembers,fees.flatMembersAndNonMembers]) {
     assert.equal(section.find(([room])=>room==='City Students Room')[1],25);
-    for(const name of ['Pre K Room','Upper Elementary Room','Lower Elementary Room','Nursery Room'])assert.equal(section.find(([room])=>room===name)[1],null);
+    for(const name of ['Pre K Room','Upper Elementary Room','Lower Elementary Room','Nursery Room'])assert.equal(section.find(([room])=>room===name)[1],25);
   }
 });
 test.after(async () => {globalThis.fetch=realFetch;await new Promise(resolve => server.close(resolve)); await rm(dir,{recursive:true,force:true});});

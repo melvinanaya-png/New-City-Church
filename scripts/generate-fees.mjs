@@ -24,11 +24,11 @@ function table(title,rateLabel,rows) {
   return y;
 }
 heading();let y=table('Room usage fees for non-members','Hourly rate',data.hourlyNonMembers);
-doc.fillColor('#68676b').fontSize(10).text('New children’s-room prices have not been set. Contact the church before making payment. City Students retains the rate from the supplied fee sheet.',48,y+18,{width:516});
+doc.fillColor('#68676b').fontSize(10).text('City Students, Pre K, Upper Elementary, Lower Elementary and Nursery are each $25 per hour for non-members. The church will confirm all applicable charges before payment.',48,y+18,{width:516});
 doc.addPage();heading();y=table('Usage fees for members and non-members','Flat rate',data.flatMembersAndNonMembers);
 doc.fillColor('#333132').fontSize(12).text('Additional responsibilities',48,y+22);
 doc.fontSize(10).text('Lost building key: $50. Damage charges are not a fixed fee; the church determines charges from the damage and repair or replacement costs.',48,y+43,{width:516});
 doc.text('Kitchen use is optional with City Commons. Select Kitchen if you intend to use it. Your group handles all setup, teardown, cleaning and room restoration.',48,y+82,{width:516});
 doc.text('The original fee sheet lists both hourly and flat-rate sections. The church will confirm which charges apply to your request before payment. This form does not calculate or collect payment.',48,y+121,{width:516});
 doc.end();await completed;await writeFile(root+'public/assets/building-usage-fees.pdf',Buffer.concat(chunks));
-console.log('Updated fee sheet generated. Unset rates are explicitly listed as contact church for pricing.');
+console.log('Updated fee sheet generated. Student and children’s rooms use the confirmed $25 rates.');
