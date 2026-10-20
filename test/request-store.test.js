@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createRequestStore,firestoreAuthFromEnvironment} from '../request-store.js';
+import {createRequestStore,firestoreAuthFromEnvironment,storageErrorMessage} from '../request-store.js';
 const id='978db4dd-5b2e-4c8d-9dc9-87c4a0969157';
 const record={id,status:'pending',approvals:[{email:'approver@example.com',tokenHash:'private-hash',approvedAt:null}],agreement:{terms:['Signed terms'],feesDocumentBase64:Buffer.from('PDF snapshot').toString('base64')},optional:undefined};
 function database() {
@@ -67,4 +67,15 @@ test('keyless Firestore authentication refreshes the existing explicit Google au
   assert.equal(refreshed,true);
   assert.throws(()=>firestoreAuthFromEnvironment({FIRESTORE_AUTH_MODE:'google-oauth'}),/requires the existing/);
   assert.throws(()=>firestoreAuthFromEnvironment({FIRESTORE_AUTH_MODE:'unknown'}),/Invalid FIRESTORE_AUTH_MODE/);
+});
+
+test('Firestore diagnostics identify actionable failures without logging provider payloads',()=>{
+  const secret='PRIVATE_TOKEN_AND_SIGNED_CONTRACT';
+  assert.match(storageErrorMessage({code:7,reason:'ACCESS_TOKEN_SCOPE_INSUFFICIENT',message:secret}),/lacks Firestore permission/);
+  assert.match(storageErrorMessage({code:7,reason:'SERVICE_DISABLED'}),/API is disabled/);
+  assert.match(storageErrorMessage({code:7}),/Google account used in OAuth Playground/);
+  assert.match(storageErrorMessage({code:5}),/database with ID/);
+  assert.match(storageErrorMessage({code:14}),/could not be reached/);
+  assert.match(storageErrorMessage({cause:{response:{status:403,data:{error:{details:[{reason:'SERVICE_USAGE_DENIED'}]}}}}}),/Service Usage Consumer/);
+  for(const error of [{message:secret},{code:7,message:secret},{cause:{message:secret}}])assert.equal(storageErrorMessage(error).includes(secret),false);
 });

@@ -9,7 +9,7 @@ import { ROOMS, approvalGroupsFor, approvalComplete, AV_CONTACT, needsAvNotifica
 import { emailConfigured, sendMail } from './google-mail.js';
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { requestStoreFromEnvironment } from './request-store.js';
+import { requestStoreFromEnvironment, storageErrorMessage } from './request-store.js';
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('.', import.meta.url));
@@ -196,6 +196,6 @@ export const server = http.createServer(async (req, res) => {
 });
 if (process.argv[1] === fileURLToPath(import.meta.url)) server.listen(Number(process.env.PORT || 3000), '0.0.0.0', () => {
   console.log('New City requests listening on port ' + (process.env.PORT || 3000));
-  requestStore.check().then(result=>console.log('Request storage check: '+result)).catch(()=>console.log('Request storage check failed. Check Firestore database, service account and permissions; requests will not fall back to local files.'));
+  requestStore.check().then(result=>console.log('Request storage check: '+result)).catch(error=>console.log('Request storage check failed: '+storageErrorMessage(error)));
   checkCalendarAccess().then(result => console.log('Google Calendar check: ' + result)).catch(() => console.log('Google Calendar check: Unable to complete diagnostics.'));
 });

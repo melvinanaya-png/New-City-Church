@@ -66,3 +66,23 @@ export function requestStoreFromEnvironment(directory) {
   const backend=process.env.STORAGE_BACKEND || 'file';
   return createRequestStore({backend,directory,projectId:process.env.FIRESTORE_PROJECT_ID,...(backend==='firestore'?firestoreAuthFromEnvironment():{})});
 }
+
+// Return only fixed diagnostics; provider errors may contain private request data.
+export function storageErrorMessage(error) {
+  const chain=[error,error?.cause,error?.cause?.cause].filter(Boolean);
+  const reasons=chain.flatMap(item=>[
+    item.reason,
+    ...(Array.isArray(item.statusDetails)?item.statusDetails.map(detail=>detail.reason):[]),
+    ...(Array.isArray(item.response?.data?.error?.details)?item.response.data.error.details.map(detail=>detail.reason):[])
+  ]);
+  if(reasons.includes('ACCESS_TOKEN_SCOPE_INSUFFICIENT'))return 'The Google refresh token lacks Firestore permission. Reauthorize Gmail send, Calendar events and datastore together, then replace GOOGLE_REFRESH_TOKEN.';
+  if(reasons.some(reason=>['SERVICE_DISABLED','API_DISABLED'].includes(reason)))return 'Firestore API is disabled for the project used by this request. Enable Cloud Firestore API in the app project.';
+  if(reasons.includes('SERVICE_USAGE_DENIED'))return 'The authorized Google user needs Service Usage Consumer permission on the API consumer project.';
+  if(reasons.includes('BILLING_DISABLED'))return 'Google reports billing is disabled for the API consumer project. Review project billing requirements.';
+  if(chain.some(item=>item.code===5 || item.code===404 || item.response?.status===404))return 'Database not found. Confirm FIRESTORE_PROJECT_ID and a Native mode database with ID (default).';
+  if(chain.some(item=>item.code===7 || item.code===403 || item.httpStatusCode===403 || item.response?.status===403))return 'Firestore permission denied. In Google Cloud IAM, verify the Google account used in OAuth Playground has Cloud Datastore User on FIRESTORE_PROJECT_ID. A grant to the unused service account does not grant the user access. Also check the datastore scope and API activation.';
+  if(chain.some(item=>item.code===16 || item.code===401 || item.httpStatusCode===401 || item.response?.status===401))return 'Google authorization was rejected. Check that the OAuth client ID, secret and refresh token match.';
+  if(chain.some(item=>item.code===8 || item.code===429 || item.response?.status===429))return 'Firestore quota or rate limit reached. Check Google Cloud quotas before retrying.';
+  if(chain.some(item=>[4,14,'ENOTFOUND','EAI_AGAIN','ECONNRESET'].includes(item.code)))return 'Firestore could not be reached or timed out. Check connectivity and retry.';
+  return 'Firestore check failed without a recognized reason. Verify project ID, database (default), datastore scope and the authorizing user’s IAM access. No local-file fallback was used.';
+}
