@@ -1,3 +1,4 @@
+import { setupResponsibility } from './setup-policy.js';
 import { AGREEMENT_VERSION, agreementHtml, validateSignature, signedAgreement, contractAttachments } from './agreement.js';
 import { sendRequesterCopy } from './requester-mail.js';
 import { checkAvailability, validateSchedule } from './availability.js';
@@ -12,7 +13,7 @@ import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('.', import.meta.url));
 const dataDir = process.env.DATA_DIR || root + '.data/requests';
-const approvedRecipients = ['facilities@newcitystc.church', 'mark.forbes@newcitystc.church', 'DaijaO2006@gmail.com'];
+const approvedRecipients = ['facilities@newcitystc.church', 'mark.forbes@newcitystc.church'];
 const hash = value => createHash('sha256').update(value).digest('hex');
 const approving = new Set();
 let bookingQueue = Promise.resolve();
@@ -51,6 +52,7 @@ export function validate(data) {
   for (const [choice, key, limit] of [['Round Tables','roundTables',6], ['Rectangular Tables','rectangularTables',8], ['Chairs','chairs',60]]) {
     if (data.setup.includes(choice) && (!Number.isInteger(data.quantities[key]) || data.quantities[key] < 1 || data.quantities[key] > limit)) return `Specify a quantity between 1 and ${limit} for ${choice.toLowerCase()}.`;
   }
+  if(data.eventType !== undefined && !['external','internal'].includes(data.eventType))return 'Choose an internal or outside event type.';
   const recurrenceError = validateRecurrence(data.recurrence);
   if (recurrenceError) return recurrenceError;
   if (data.agree !== true) return 'Please acknowledge the agreement and that your request requires approval.';
@@ -61,7 +63,7 @@ function requestDetails(record,includeSignature=true) {
   const rooms = record.rooms ? record.rooms.join(', ') + (record.rooms.includes('Other') ? ` (${record.roomsOther})` : '') : record.space;
   const equipment = record.equipment ? record.equipment.join(', ') + (record.equipment.includes('Other') ? ` (${record.equipmentOther})` : '') : (record.needs || []).join(', ');
   const setup = record.setup ? record.setup.map(choice => `${choice}: ${record.quantities?.[{'Round Tables':'roundTables','Rectangular Tables':'rectangularTables','Chairs':'chairs'}[choice]]}`).join(', ') || 'None requested' : 'See original notes';
-  return `Setup/cleanup: The requester is responsible; the church does not provide setup services.\n${includeSignature ? `Agreement: ${record.agreement ? `Signed by ${record.agreement.signedName} at ${record.agreement.signedAt}; version ${record.agreement.version}` : 'No signed agreement on file for this older request'}\n` : ''}Schedule: ${recurrenceSummary(record.date,record.recurrence)}\nRooms: ${rooms}\nEquipment: ${equipment}\nSetup quantities: ${setup}`;
+  return `Setup/cleanup: ${setupResponsibility(record)}\n${includeSignature ? `Agreement: ${record.agreement ? `Signed by ${record.agreement.signedName} at ${record.agreement.signedAt}; version ${record.agreement.version}` : 'No signed agreement on file for this older request'}\n` : ''}Schedule: ${recurrenceSummary(record.date,record.recurrence)}\nRooms: ${rooms}\nEquipment: ${equipment}\nSetup quantities: ${setup}`;
 }
 async function sendApprovalCopy(record,file) {
   if(!record.agreement || record.requesterApprovalNotification==='sent')return true;
@@ -147,7 +149,8 @@ export const server = http.createServer(async (req, res) => {
       const id = randomUUID();
       const approvalGroups = approvalGroupsFor(data.rooms);
       const tokens = [...new Set(approvalGroups.flatMap(group => group.approvers))].map(email => ({email,token:randomBytes(32).toString('hex')}));
-      const record = {id, approvalGroups, approvals:tokens.map(({email,token}) => ({email,tokenHash:hash(token),approvedAt:null,notification:'pending'})), expiresAt: Date.now() + 14 * 86400000, ...Object.fromEntries(['name','email','title','ministry','date','start','end','guests','notes','rooms','roomsOther','equipment','equipmentOther','setup','quantities','recurrence'].map(k => [k, data[k]])), status: 'pending', submittedAt: new Date().toISOString()};
+      const record = {id, approvalGroups, approvals:tokens.map(({email,token}) => ({email,tokenHash:hash(token),approvedAt:null,notification:'pending'})), expiresAt: Date.now() + 14 * 86400000, ...Object.fromEntries(['name','email','title','ministry','date','start','end','guests','notes','rooms','roomsOther','equipment','equipmentOther','setup','quantities','recurrence','eventType'].map(k => [k, data[k]])), status: 'pending', submittedAt: new Date().toISOString()};
+      record.eventType ||= 'external';
       record.agreement = signedAgreement(data);
       record.requesterReceiptNotification = 'pending';
       record.avRequested = needsAvNotification(data.equipment);
@@ -161,7 +164,7 @@ export const server = http.createServer(async (req, res) => {
       for (const {email,token} of tokens) {
         const approvalUrl = `${process.env.PUBLIC_BASE_URL.replace(/\/$/, '')}/approval#id=${id}&token=${token}`;
         const routing = approvalGroups.map(group => `${group.name}: either ${group.approvers.join(' or ')}`).join('\n');
-        const message = `New building request — pending review\nReference: ${id}\n\nEvent: ${data.title}\nMinistry: ${data.ministry}\nRequester: ${data.name} (${data.email})\nDate: ${data.date}\nTime: ${data.start}–${data.end} America/Chicago\n${requestDetails(record)}\nAttendance: ${data.guests}\nNotes: ${data.notes || 'None'}\n\nApproval routing:\n${routing}\nYour approval covers the complete schedule shown above. One approval from each applicable room group is required. Hope can approve every group.\n\nPlease review and approve with your private link (expires in 14 days): ${approvalUrl}\nDo not forward this link; anyone with it can approve your room group(s). Once all room groups are approved, Darrell, Mark, and Daija are notified. After approval, the app adds the event to the shared Google Calendar when connected. Planning Center reservations remain separate.`;
+        const message = `New building request — pending review\nReference: ${id}\n\nEvent: ${data.title}\nMinistry: ${data.ministry}\nRequester: ${data.name} (${data.email})\nDate: ${data.date}\nTime: ${data.start}–${data.end} America/Chicago\n${requestDetails(record)}\nAttendance: ${data.guests}\nNotes: ${data.notes || 'None'}\n\nApproval routing:\n${routing}\nYour approval covers the complete schedule shown above. One approval from each applicable room group is required. Hope can approve every group.\n\nPlease review and approve with your private link (expires in 14 days): ${approvalUrl}\nDo not forward this link; anyone with it can approve your room group(s). Once all room groups are approved, Darrell and Mark are notified. After approval, the app adds the event to the shared Google Calendar when connected. Planning Center reservations remain separate.`;
         let delivered = false;
         try {delivered = (await sendMail([email], `${record.avRequested && email === AV_CONTACT ? 'AV support requested — ' : ''}Building request: ${data.title.replace(/[\r\n]/g,' ')}`, message, `${id}-${record.approvals.findIndex(a => a.email === email)}`, data.email, approvalEmailHtml(record, approvalUrl, requestDetails(record), routing), attachments)).ok;} catch { /* Preserve the request and report uncertain delivery without automatic retries. */ }
         record.approvals.find(a => a.email === email).notification = delivered ? 'sent' : 'failed-or-uncertain';
@@ -172,7 +175,7 @@ export const server = http.createServer(async (req, res) => {
         if (approvalEmail) record.avNotification = approvalEmail.notification === 'sent' ? 'included-in-approval-email' : 'failed-or-uncertain';
         else {
           let delivered = false;
-          try {delivered = (await sendMail([AV_CONTACT], `AV support requested: ${data.title.replace(/[\r\n]/g,' ')}`, `A building request includes AV support. This is an advance notice, not a confirmed booking or an approval assignment.\n\nEvent: ${data.title}\nRequester: ${data.name} (${data.email})\nDate: ${data.date}\nTime: ${data.start}–${data.end} Central Time\n${requestDetails(record)}\nNotes: ${data.notes || 'None'}\nReference: ${id}\n\nThe requester is responsible for setup and cleanup; this is not a setup-service request.\nThe assigned room approvers will review the request.`, `av-${id}`, data.email)).ok;} catch { /* Preserve failure status for follow-up. */ }
+          try {delivered = (await sendMail([AV_CONTACT], `AV support requested: ${data.title.replace(/[\r\n]/g,' ')}`, `A building request includes AV support. This is an advance notice, not a confirmed booking or an approval assignment.\n\nEvent: ${data.title}\nRequester: ${data.name} (${data.email})\nDate: ${data.date}\nTime: ${data.start}–${data.end} Central Time\n${requestDetails(record)}\nNotes: ${data.notes || 'None'}\nReference: ${id}\n\n${setupResponsibility(record)}\nThe assigned room approvers will review the request.`, `av-${id}`, data.email)).ok;} catch { /* Preserve failure status for follow-up. */ }
           record.avNotification = delivered ? 'sent' : 'failed-or-uncertain';
         }
         await writeFile(file,JSON.stringify(record,null,2),{mode:0o600});

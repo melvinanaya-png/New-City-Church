@@ -28,8 +28,8 @@ The app runs on port 3000 (`PORT` overrides it). `npm run dev` restarts on edits
    - City Commons: Hospitality (`hospitality@newcitystc.church`) or Hope.
    - Kitchen alone, Entire Building and Other: Hope. City Commons + optional Kitchen is one Hospitality-or-Hope approval group.
 3. Either assigned person can approve a room group. Requests spanning different groups require coverage of each group; Hope can approve all groups. For example, a classroom + Worship Center request can be approved by Hope alone, or by Milyn and Melvin together. Each person receives one email even when multiple rooms are selected. Opening a link does not approve.
-4. Once all selected room groups are approved, the app notifies `facilities@newcitystc.church` (Darrell) , `mark.forbes@newcitystc.church` (Mark), and `DaijaO2006@gmail.com` (Daija Owens, facilities/reset coordination; requester performs setup). Duplicate or late approvals do not resend completed notifications.
-5. Once all room groups are approved, the app creates one event in the configured **shared Google Calendar** and emails Darrell, Mark, and Daija the outcome. Calendar errors leave the request approved with an explicit pending-calendar message; retry from the same approval link. Retries use the same Google event ID to avoid duplicates. Google Calendar does not create Planning Center reservations.
+4. Once all selected room groups are approved, the app notifies `facilities@newcitystc.church` (Darrell) and `mark.forbes@newcitystc.church` (Mark). Duplicate or late approvals do not resend completed notifications.
+5. Once all room groups are approved, the app creates one event in the configured **shared Google Calendar** and emails Darrell and Mark the outcome. Calendar errors leave the request approved with an explicit pending-calendar message; retry from the same approval link. Retries use the same Google event ID to avoid duplicates. Google Calendar does not create Planning Center reservations.
 
 Approval links expire after 14 days and act as bearer credentials; do not forward them. Tokens are stored only as hashes, carried in URL fragments, and removed from the browser URL when the approval page loads. Approval records must survive restarts for the links to work. Render Free currently has no durable storage configured; it remains unsuitable for real requests until storage is connected.
 
@@ -82,7 +82,7 @@ The prior form at https://newcitystc.church/new-page returned HTTP 403 during in
 
 ## AV request notifications
 
-Selecting Sound Technician, TV Screens, Sound/Mixer, Microphones or TV/DVD notifies `melvin.anaya@newcitystc.church` immediately when submitted. If Melvin is already an assigned room approver, his approval email doubles as the AV notice and its subject is marked accordingly. Otherwise, he gets a separate informational email with no approval token; this does not grant him permission to approve another team's rooms. Final approvals still notify Darrell, Mark and Daija. Calendar creation waits for room approval as before.
+Selecting Sound Technician, TV Screens, Sound/Mixer, Microphones or TV/DVD notifies `melvin.anaya@newcitystc.church` immediately when submitted. If Melvin is already an assigned room approver, his approval email doubles as the AV notice and its subject is marked accordingly. Otherwise, he gets a separate informational email with no approval token; this does not grant him permission to approve another team's rooms. Final approvals still notify Darrell and Mark. Calendar creation waits for room approval as before.
 
 ## Squarespace placement
 
@@ -123,7 +123,7 @@ At submission, the requester receives the signed agreement PDF and fee-sheet PDF
 
 Three church-supplied HEIC photographs are retained as JPEG references: City Commons layout, City Commons chair storage, and kitchen. Original Reset files are authoritative. Separately labelled Enhanced Visual Aid copies use AI-assisted lighting/clarity edits and may change small details; they are not the definitive reset references. The originals remain preserved in the upload workspace and the original-layout JPEG assets remain alongside enhanced copies.
 
-`RESET_PHOTOS` in `agreement.js` maps room names to attachment arrays. City Commons alone receives its two originals and two enhanced views, not the kitchen images. Selecting Kitchen adds the kitchen original and enhanced view; Entire Building receives all photos. No photos are exposed through public application routes. Kitchen-specific cleanup duties apply only when the kitchen is used. City Commons + Kitchen can be approved by Hospitality or Hope; Kitchen alone still routes to Hope. Existing signed terms stay snapshotted, while new requests use agreement version `2026-10-20-v4`.
+`RESET_PHOTOS` in `agreement.js` maps room names to attachment arrays. City Commons alone receives its two originals and two enhanced views, not the kitchen images. Selecting Kitchen adds the kitchen original and enhanced view; Entire Building receives all photos. No photos are exposed through public application routes. Kitchen-specific cleanup duties apply only when the kitchen is used. City Commons + Kitchen can be approved by Hospitality or Hope; Kitchen alone still routes to Hope. Existing signed terms stay snapshotted, while new requests use agreement version `2026-10-20-v5`.
 
 ### Expanded fee sheet
 
@@ -136,3 +136,5 @@ No codes are currently collected, stored, exposed, or automatically sent. Keep t
 Send approved users access instructions separately for the actual visit date, near the event, after any required fees have been confirmed. Recurring users need a current code for each applicable period, rather than a promise that one code works for the entire series. This delivery/scheduling workflow has not been built; staff must provide access instructions manually until then. Never ask users to post codes or credentials in chat.
 
 Setup inventory limits per request: 6 round tables, 8 rectangular tables, and 60 chairs. The browser and server enforce these maxima; setup remains optional. These are per-request limits, not pooled inventory reservations across different rooms.
+
+Event setup policy: Daija is no longer a notification recipient. Outside/community events supply their own setup, teardown and cleanup. Internal New City events are identified by the Event type field; church staff arrange setup help separately, and the form does not automatically assign or contact a setup volunteer. Staff approval notifications go only to Darrell and Mark. Existing signed contracts retain their original terms.

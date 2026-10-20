@@ -28,7 +28,7 @@ doc.fillColor('#68676b').fontSize(10).text('City Students, Pre K, Upper Elementa
 doc.addPage();heading();y=table('Usage fees for members','Flat rate',data.flatMembers);
 doc.fillColor('#333132').fontSize(12).text('Additional responsibilities',48,y+22);
 doc.fontSize(10).text('Lost building key: $50. Damage charges are not a fixed fee; the church determines charges from the damage and repair or replacement costs.',48,y+43,{width:516});
-doc.text('Kitchen use is optional with City Commons. Select Kitchen if you intend to use it. Your group handles all setup, teardown, cleaning and room restoration.',48,y+82,{width:516});
+doc.text('Kitchen use is optional with City Commons. Select Kitchen if you intend to use it. Outside groups handle setup, teardown and cleanup. Internal-event setup help is arranged separately by church staff.',48,y+82,{width:516});
 doc.text('The original fee sheet lists both hourly and flat-rate sections. The church will confirm which charges apply to your request before payment. This form does not calculate or collect payment.',48,y+121,{width:516});
 doc.end();await completed;await writeFile(root+'public/assets/building-usage-fees.pdf',Buffer.concat(chunks));
 console.log('Updated fee sheet generated. Student and children’s rooms use the confirmed $25 rates.');

@@ -82,7 +82,7 @@ test('serves page and does not claim email delivery without credentials', async 
   assert.match(await (await fetch(base)).text(), /MAKE ROOM FOR/);
   assert.equal((await post('/api/requests',request)).status,503);
 });
-test('Hope receives common-room requests; approval notifies Darrell, Mark and Daija once', async () => {
+test('Hope receives common-room requests; approval notifies Darrell and Mark once', async () => {
   process.env.GOOGLE_CALENDAR_ID='test-calendar@group.calendar.google.com'; process.env.GOOGLE_CLIENT_ID='test-client'; process.env.GOOGLE_CLIENT_SECRET='test-secret'; process.env.GOOGLE_REFRESH_TOKEN='test-refresh'; process.env.PUBLIC_BASE_URL = base;
   const response = await post('/api/requests',request);
   assert.equal(response.status,201);
@@ -101,7 +101,7 @@ test('Hope receives common-room requests; approval notifies Darrell, Mark and Da
   assert.equal((await post('/api/approve',{id,token:'0'.repeat(64)})).status,403);
   assert.equal((await post('/api/approve',{id,token})).status,200);
   assert.match(messages[1].text,/Round Tables: 5, Chairs: 25/);
-  assert.deepEqual(messages[1].to,['facilities@newcitystc.church','mark.forbes@newcitystc.church','DaijaO2006@gmail.com']);
+  assert.deepEqual(messages[1].to,['facilities@newcitystc.church','mark.forbes@newcitystc.church']);
   assert.equal((await post('/api/approve',{id,token})).status,200);
   assert.equal(messages.length,2);
 });
@@ -133,7 +133,7 @@ test('mixed classroom and worship request waits for coverage of both room groups
   assert.equal(second.status,200);
   assert.equal((await second.json()).status,'approved');
   assert.equal(messages.length,before+4);
-  assert.deepEqual(messages.at(-1).to,['facilities@newcitystc.church','mark.forbes@newcitystc.church','DaijaO2006@gmail.com']);
+  assert.deepEqual(messages.at(-1).to,['facilities@newcitystc.church','mark.forbes@newcitystc.church']);
   assert.match(messages.at(-1).text,/milyn.farrier@/);
   assert.match(messages.at(-1).text,/melvin.anaya@/);
   assert.match(messages.at(-1).text,/Added to the shared/);
@@ -217,7 +217,7 @@ test('startup calendar check performs no event insert or email send', async () =
   assert.match(await checkCalendarAccess(),/read access verified/);
   assert.equal(calendarInserts,inserts);assert.equal(messages.length,emails);
 });
-test('City Commons accepts Hospitality approval and notifies Daija after approval', async () => {
+test('City Commons accepts Hospitality approval and notifies facilities after approval', async () => {
   const before=messages.length;
   const response=await post('/api/requests',{...request,rooms:['City Commons'],setup:[],quantities:{}});
   assert.equal(response.status,201);
@@ -228,7 +228,7 @@ test('City Commons accepts Hospitality approval and notifies Daija after approva
   assert.match(hospitality.text,/Setup quantities: None requested/);
   const approved=await post('/api/approve',{id,token:tokenFrom(hospitality)});
   assert.equal((await approved.json()).status,'approved');
-  assert.deepEqual(messages.at(-1).to,['facilities@newcitystc.church','mark.forbes@newcitystc.church','DaijaO2006@gmail.com']);
+  assert.deepEqual(messages.at(-1).to,['facilities@newcitystc.church','mark.forbes@newcitystc.church']);
   assert.match(messages.at(-1).text,/None requested/);
 });
 test('setup is optional but quantities remain required for selected items', () => {
@@ -441,5 +441,17 @@ test('setup quantities accept each inventory limit and reject amounts above it',
     assert.equal(validate({...request,setup:[choice],quantities:{[key]:limit}}),undefined);
     assert.match(validate({...request,setup:[choice],quantities:{[key]:limit+1}}),new RegExp(`between 1 and ${limit}`));
   }
+});
+test('internal setup is coordinated separately and never adds a setup recipient', async () => {
+  const {setupResponsibility}=await import('../setup-policy.js');
+  assert.match(setupResponsibility({eventType:'internal'}),/church staff will arrange setup help separately/);
+  assert.match(setupResponsibility({eventType:'external'}),/requester is responsible/);
+  const before=messages.length;
+  const response=await post('/api/requests',{...request,eventType:'internal'});assert.equal(response.status,201);
+  const {id}=await response.json();assert.match(messages[before].text,/Internal church event/);
+  assert.equal((await post('/api/approve',{id,token:tokenFrom(messages[before])})).status,200);
+  assert.deepEqual(messages.at(-1).to,['facilities@newcitystc.church','mark.forbes@newcitystc.church']);
+  assert.match(requesterMessages.at(-1).text,/setup help separately/);
+  assert.ok(!messages.some(message=>message.to.some(email=>email.toLowerCase()==='daijao2006@gmail.com')));
 });
 test.after(async () => {globalThis.fetch=realFetch;await new Promise(resolve => server.close(resolve)); await rm(dir,{recursive:true,force:true});});
