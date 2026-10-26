@@ -94,12 +94,15 @@ test('Hope receives common-room requests; approval notifies Darrell and Mark onc
   assert.match(messages[0].html,/href="http:\/\//);
   assert.ok(messages[0].html.includes(tokenFrom(messages[0])));
   assert.match(messages[0].html,/clicking the button alone does not approve/);
+  assert.match(messages[0].text,/Time: 5:00 PM–7:00 PM Central Time/);
+  assert.match(messages[0].html,/5:00 PM–7:00 PM Central Time/);
   assert.match(messages[0].text,/Rooms: Kitchen/);
   assert.match(messages[0].text,/Equipment: Other \(Whiteboard\)/);
   assert.match(messages[0].text,/Round Tables: 5, Chairs: 25/);
   const token = messages[0].text.match(/token=([a-f0-9]{64})/)[1];
   assert.equal((await post('/api/approve',{id,token:'0'.repeat(64)})).status,403);
   assert.equal((await post('/api/approve',{id,token})).status,200);
+  assert.match(messages[1].text,/Time: 5:00 PM–7:00 PM Central Time/);
   assert.match(messages[1].text,/Round Tables: 5, Chairs: 25/);
   assert.deepEqual(messages[1].to,['facilities@newcitystc.church','mark.forbes@newcitystc.church']);
   assert.equal((await post('/api/approve',{id,token})).status,200);
