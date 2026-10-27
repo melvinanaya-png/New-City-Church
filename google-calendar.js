@@ -1,3 +1,4 @@
+import { workspaceAuthorizationMessage } from './workspace-auth.js';
 import { recurrenceRule } from './recurrence.js';
 import { googleAccessToken, googleAuthorizationConfigured } from './google-mail.js';
 export function calendarConfigured() {
@@ -35,7 +36,7 @@ export async function checkCalendarAccess() {
     const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(process.env.GOOGLE_CALENDAR_ID)}/events?maxResults=1&fields=kind`, {headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(15000)});
     if (!response.ok) return calendarError(response);
     return 'Calendar read access verified. Event creation still requires a live approval test.';
-  } catch {return 'Calendar check could not reach Google; retry after checking connectivity.';}
+  } catch(error) {return workspaceAuthorizationMessage(error) || 'Calendar check could not reach Google; retry after checking connectivity.';}
 }
 export async function createApprovedEvent(record, details) {
   if (record.status !== 'approved') throw Error('Calendar events require completed room approvals.');

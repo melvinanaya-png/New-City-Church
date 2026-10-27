@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createWorkspaceTokenProvider,workspaceDelegationConfigured} from '../workspace-auth.js';
+import {createWorkspaceTokenProvider,workspaceDelegationConfigured,workspaceAuthorizationMessage} from '../workspace-auth.js';
 import {firestoreAuthFromEnvironment} from '../request-store.js';
 import {legacyRedirectBase,legacyRedirectLocation} from '../legacy-redirect.js';
 const env={GOOGLE_AUTH_MODE:'workspace-delegation',GOOGLE_SERVICE_ACCOUNT_EMAIL:'requests@example-project.iam.gserviceaccount.com',GOOGLE_WORKSPACE_USER:'melvin.anaya@newcitystc.church'};
@@ -42,4 +42,25 @@ test('legacy migration redirects preserve approval paths and cannot redirect to 
  assert.equal(new URL(legacyRedirectLocation(base,'//evil.example/approval')).hostname,base.hostname);
  assert.throws(()=>legacyRedirectBase('https://evil.example'),/Cloud Run/);
  assert.equal(legacyRedirectBase(''),null);
+});
+
+test('Calendar diagnostics distinguish Workspace signing from admin authorization without exposing provider text',async()=>{
+ for(const [stage,reason,status,expected] of [
+  ['sign','SERVICE_DISABLED',403,/Enable IAM Service Account Credentials API/],
+  ['sign','IAM_PERMISSION_DENIED',403,/actual Cloud Run runtime identity/],
+  ['exchange','unauthorized_client',401,/numeric OAuth client ID/],
+  ['exchange','invalid_grant',400,/delegated Workspace user/],
+  ['exchange','PRIVATE_UNKNOWN',400,/Check Workspace delegation/]
+ ]) {
+  const provider=createWorkspaceTokenProvider({getServiceToken:async()=>'test-service-token',fetchImpl:async url=>{
+   if(stage==='exchange' && url.startsWith('https://iamcredentials.googleapis.com/'))return new Response(JSON.stringify({signedJwt:'test-assertion'}),{status:200});
+   return new Response(JSON.stringify({error:stage==='sign'?{details:[{reason}],message:'PRIVATE_PROVIDER_TEXT'}:reason,error_description:'PRIVATE_PROVIDER_TEXT'}),{status});
+  }});
+  await assert.rejects(provider(env),error=>{
+   const message=workspaceAuthorizationMessage(error);
+   assert.match(message,expected);assert.match(message,new RegExp(`HTTP ${status}`));
+   assert.equal(message.includes('PRIVATE_'),false);return true;
+  });
+ }
+ assert.equal(workspaceAuthorizationMessage(new Error('PRIVATE_PROVIDER_TEXT')),null);
 });
