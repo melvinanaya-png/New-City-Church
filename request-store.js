@@ -2,7 +2,7 @@ import {readFile, mkdir, writeFile, rename, unlink} from 'node:fs/promises';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {Firestore} from '@google-cloud/firestore';
-import {UserRefreshClient} from 'google-auth-library';
+import {UserRefreshClient, GoogleAuth} from 'google-auth-library';
 
 const validId = id => /^[0-9a-f-]{36}$/.test(id);
 export function createRequestStore({backend='file', directory, projectId, credentials, authClient, client}={}) {
@@ -64,6 +64,7 @@ export function createRequestStore({backend='file', directory, projectId, creden
 // Explicit credentials only: never silently adopt unrelated workspace ADC.
 export function firestoreAuthFromEnvironment(env=process.env) {
   const mode=env.FIRESTORE_AUTH_MODE || (env.FIRESTORE_SERVICE_ACCOUNT_JSON?'service-account':'google-oauth');
+  if(mode==='attached-service-account')return {authClient:new GoogleAuth({scopes:['https://www.googleapis.com/auth/cloud-platform']})};
   if(mode==='google-oauth') {
     if(!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.GOOGLE_REFRESH_TOKEN) throw new Error('Firestore Google authorization requires the existing GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REFRESH_TOKEN.');
     return {authClient:new UserRefreshClient(env.GOOGLE_CLIENT_ID,env.GOOGLE_CLIENT_SECRET,env.GOOGLE_REFRESH_TOKEN)};
@@ -98,7 +99,8 @@ export function storageErrorMessage(error) {
 }
 
 export async function diagnoseFirestoreOAuth(authClient,projectId,fetchImpl=fetch) {
-  const {token}=await authClient.getAccessToken();
+  const access=await authClient.getAccessToken();
+  const token=typeof access==='string'?access:access?.token;
   if(!token)throw Object.assign(new Error('Google authorization unavailable.'),{code:16});
   const database=`projects/${projectId}/databases/(default)`;
   const response=await fetchImpl(`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents:batchGet`,{

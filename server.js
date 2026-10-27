@@ -1,3 +1,4 @@
+import { legacyRedirectBase, legacyRedirectLocation } from './legacy-redirect.js';
 import { emailTimeRange } from './time-format.js';
 import { setupResponsibility } from './setup-policy.js';
 import { AGREEMENT_VERSION, agreementHtml, validateSignature, signedAgreement, contractAttachments } from './agreement.js';
@@ -13,6 +14,7 @@ import { readFile } from 'node:fs/promises';
 import { requestStoreFromEnvironment, storageErrorMessage } from './request-store.js';
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+const redirectBase=legacyRedirectBase(process.env.LEGACY_REDIRECT_BASE_URL);
 const root = fileURLToPath(new URL('.', import.meta.url));
 const dataDir = process.env.DATA_DIR || root + '.data/requests';
 const requestStore = requestStoreFromEnvironment(dataDir);
@@ -78,6 +80,7 @@ async function sendApprovalCopy(record) {
 const json = (res, status, value) => {res.writeHead(status, {'Content-Type': 'application/json', 'Cache-Control': 'no-store'}); res.end(JSON.stringify(value));};
 export const server = http.createServer(async (req, res) => {
   try {
+    if(redirectBase){res.writeHead(307,{'Location':legacyRedirectLocation(redirectBase,req.url),'Cache-Control':'no-store'});return res.end();}
     const path = new URL(req.url, 'http://localhost').pathname;
     if (req.method === 'GET' && path === '/api/status') return json(res, 200, {emailConfigured: emailConfigured(), calendarConfigured: calendarConfigured(), storageBackend:requestStore.backend, durableStorageConfigured:requestStore.backend==='firestore'});
     if (path === '/api/availability' && req.method === 'POST') {
@@ -197,6 +200,7 @@ export const server = http.createServer(async (req, res) => {
 });
 if (process.argv[1] === fileURLToPath(import.meta.url)) server.listen(Number(process.env.PORT || 3000), '0.0.0.0', () => {
   console.log('New City requests listening on port ' + (process.env.PORT || 3000));
+  if(redirectBase){console.log('Legacy redirect enabled; no requests are processed on this service.');return;}
   requestStore.check().then(result=>console.log('Request storage check: '+result)).catch(error=>console.log('Request storage check failed: '+storageErrorMessage(error)));
   checkCalendarAccess().then(result => console.log('Google Calendar check: ' + result)).catch(() => console.log('Google Calendar check: Unable to complete diagnostics.'));
 });

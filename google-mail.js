@@ -1,8 +1,14 @@
+import { workspaceAccessToken, workspaceDelegationConfigured } from './workspace-auth.js';
 import { randomUUID } from 'node:crypto';
 // Gmail API with server-side OAuth refresh; credentials are never sent to browsers.
-export const sender = 'melvin.anaya@newcitystc.church';
+export const sender = process.env.GOOGLE_AUTH_MODE==='workspace-delegation' && workspaceDelegationConfigured() ? process.env.GOOGLE_WORKSPACE_USER : 'melvin.anaya@newcitystc.church';
+export function googleAuthorizationConfigured() {
+  if(process.env.GOOGLE_AUTH_MODE==='workspace-delegation')return workspaceDelegationConfigured();
+  if(process.env.GOOGLE_AUTH_MODE && process.env.GOOGLE_AUTH_MODE!=='user-oauth')return false;
+  return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REFRESH_TOKEN);
+}
 export function emailConfigured() {
-  return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REFRESH_TOKEN && process.env.PUBLIC_BASE_URL);
+  return Boolean(googleAuthorizationConfigured() && process.env.PUBLIC_BASE_URL);
 }
 const reportedAuthFailures = new Set();
 function reportTokenFailure(code, status) {
@@ -20,6 +26,8 @@ function reportTokenFailure(code, status) {
   console.warn(`Google authorization: ${explanations[known] || 'Token refresh failed. Check the matching OAuth credentials and Google authorization.'} (HTTP ${status}; ${known})`);
 }
 export async function googleAccessToken() {
+  if(process.env.GOOGLE_AUTH_MODE==='workspace-delegation')return workspaceAccessToken();
+  if(process.env.GOOGLE_AUTH_MODE && process.env.GOOGLE_AUTH_MODE!=='user-oauth')throw new Error('Invalid GOOGLE_AUTH_MODE.');
   const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'},
     body: new URLSearchParams({client_id:process.env.GOOGLE_CLIENT_ID, client_secret:process.env.GOOGLE_CLIENT_SECRET, refresh_token:process.env.GOOGLE_REFRESH_TOKEN, grant_type:'refresh_token'}).toString(),

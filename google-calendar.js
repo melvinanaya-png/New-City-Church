@@ -1,7 +1,7 @@
 import { recurrenceRule } from './recurrence.js';
-import { googleAccessToken } from './google-mail.js';
+import { googleAccessToken, googleAuthorizationConfigured } from './google-mail.js';
 export function calendarConfigured() {
-  return Boolean(process.env.GOOGLE_CALENDAR_ID && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REFRESH_TOKEN);
+  return Boolean(process.env.GOOGLE_CALENDAR_ID && googleAuthorizationConfigured());
 }
 export async function calendarError(response) {
   let payload; try {payload = await response.json();} catch { /* Report status without dumping provider bodies. */ }

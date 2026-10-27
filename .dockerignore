@@ -1,0 +1,10 @@
+.git
+node_modules
+.data
+.env
+.env.*
+*.log
+coverage
+attachments
+generated_images
+test
