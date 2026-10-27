@@ -6,7 +6,7 @@ A responsive building-request page, using Node.js 22+ and pinned PDFKit dependen
 
 The supplied New City Church brand guide defines the color palette: blue `#4f8cad`, cream `#fcfaed`, charcoal `#333132`, green `#779221`, and rust `#a94018`. The page uses the original blue logo extracted from the guide, Barlow for body text, and Barlow Condensed SemiBold for uppercase headings. Fonts are hosted locally under the SIL Open Font License, included in `public/assets/fonts/OFL.txt`.
 
-Room request and equipment needs are required multi-select groups. Tables and chairs are optional; leave setup selections blank if none are needed. Selected round tables, rectangular tables, and chairs require positive whole-number quantities. Selecting Other for rooms or equipment requires a description. The approval agreement is required. The browser and server validate these requirements, and both notification emails include selections and quantities.
+Room request is a required multi-select group. Equipment needs are optional; requests may leave all equipment selections blank. Tables and chairs are optional; leave setup selections blank if none are needed. Selected round tables, rectangular tables, and chairs require positive whole-number quantities. Selecting Other for rooms or equipment requires a description. The approval agreement is required. The browser and server validate these requirements, and both notification emails include selections and quantities.
 
 ## Run
 

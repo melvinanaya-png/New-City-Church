@@ -47,7 +47,7 @@ export function validate(data) {
     setup: ['Round Tables', 'Rectangular Tables', 'Chairs']
   };
   for (const [name, choices] of Object.entries(groups)) {
-    if (!Array.isArray(data[name]) || data[name].length < (name === 'setup' ? 0 : 1) || data[name].length > choices.length || new Set(data[name]).size !== data[name].length || data[name].some(value => !choices.includes(value))) return `Select at least one valid ${name} option.`;
+    if (!Array.isArray(data[name]) || data[name].length < (name === 'rooms' ? 1 : 0) || data[name].length > choices.length || new Set(data[name]).size !== data[name].length || data[name].some(value => !choices.includes(value))) return `Select at least one valid ${name} option.`;
   }
   for (const name of ['rooms', 'equipment']) {
     const detail = data[`${name}Other`];
@@ -65,7 +65,7 @@ export function validate(data) {
 function requestDetails(record,includeSignature=true) {
   // Old records can still be reviewed until their approval links expire.
   const rooms = record.rooms ? record.rooms.join(', ') + (record.rooms.includes('Other') ? ` (${record.roomsOther})` : '') : record.space;
-  const equipment = record.equipment ? record.equipment.join(', ') + (record.equipment.includes('Other') ? ` (${record.equipmentOther})` : '') : (record.needs || []).join(', ');
+  const equipment = record.equipment ? (record.equipment.join(', ') || 'None requested') + (record.equipment.includes('Other') ? ` (${record.equipmentOther})` : '') : (record.needs || []).join(', ');
   const setup = record.setup ? record.setup.map(choice => `${choice}: ${record.quantities?.[{'Round Tables':'roundTables','Rectangular Tables':'rectangularTables','Chairs':'chairs'}[choice]]}`).join(', ') || 'None requested' : 'See original notes';
   return `Setup/cleanup: ${setupResponsibility(record)}\n${includeSignature ? `Agreement: ${record.agreement ? `Signed by ${record.agreement.signedName} at ${record.agreement.signedAt}; version ${record.agreement.version}` : 'No signed agreement on file for this older request'}\n` : ''}Schedule: ${recurrenceSummary(record.date,record.recurrence)}\nRooms: ${rooms}\nEquipment: ${equipment}\nSetup quantities: ${setup}`;
 }

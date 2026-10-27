@@ -26,7 +26,7 @@ const form = document.querySelector('#request-form');
 const result = document.querySelector('#result');
 const submit = document.querySelector('#submit');
 const connection = document.querySelector('#connection');
-const groups = [...form.querySelectorAll('[data-required-group]')];
+const groups = [...form.querySelectorAll('[data-required-group], [data-optional-group]')];
 const availabilityStatus = document.querySelector('#availability-status');
 const availabilityRetry = document.querySelector('#availability-retry');
 availabilityRetry.addEventListener('click',queueAvailability);
@@ -93,11 +93,11 @@ form.elements.occurrences.addEventListener('input', updateRecurrence);
 function updateSelections() {
   updateRecurrence();
   for (const group of groups) {
-    const name = group.dataset.requiredGroup;
+    const name = group.dataset.requiredGroup || group.dataset.optionalGroup;
     const checks = [...group.querySelectorAll(`input[name="${name}"]`)];
     checks.forEach(input=>input.setCustomValidity(''));
     const target=checks.find(input=>!input.disabled);
-    if(target)target.setCustomValidity(checks.some(input => input.checked && !input.disabled) ? '' : 'Select at least one available option in this group.');
+    if(target && group.hasAttribute('data-required-group'))target.setCustomValidity(checks.some(input => input.checked && !input.disabled) ? '' : 'Select at least one available option in this group.');
     const detail = group.querySelector('.other-detail');
     if (detail) {
       const selected = checks.some(input => input.value === 'Other' && input.checked);

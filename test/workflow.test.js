@@ -72,7 +72,8 @@ test('request validation rejects invalid time and email', () => {
   assert.equal(validate(request), undefined);
   assert.match(validate({...request,end:'16:00'}), /End time/);
   assert.match(validate({...request,email:'bad'}), /email/);
-  for (const group of ['rooms','equipment']) assert.match(validate({...request,[group]:[]}), /Select at least one/);
+  assert.match(validate({...request,rooms:[]}), /Select at least one/);
+  assert.equal(validate({...request,equipment:[]}),undefined);
   assert.match(validate({...request,quantities:{roundTables:0,chairs:25}}), /quantity/);
   assert.match(validate({...request,rooms:['Other'],roomsOther:''}), /specify other rooms/);
   assert.match(validate({...request,agree:false}), /acknowledge/);
@@ -459,3 +460,15 @@ test('setup is arranged separately without an event classification question', as
   assert.ok(!messages.some(message=>message.to.some(email=>email.toLowerCase()==='daijao2006@gmail.com')));
 });
 test.after(async () => {globalThis.fetch=realFetch;await new Promise(resolve => server.close(resolve)); await rm(dir,{recursive:true,force:true});});
+
+test('requests without equipment submit successfully and send no AV notification',async()=>{
+  const before=messages.length;
+  const response=await post('/api/requests',{...request,equipment:[],equipmentOther:'',setup:[],quantities:{}});
+  assert.equal(response.status,201);
+  const sent=messages.slice(before);
+  assert.equal(sent.length,1);
+  assert.deepEqual(sent[0].to,['hope.varwig@newcitystc.church']);
+  assert.match(sent[0].text,/Equipment: None requested/);
+  assert.equal(validate({...request,rooms:[],equipment:[],equipmentOther:''}),'Select at least one valid rooms option.');
+  assert.equal(validate({...request,equipment:['Other'],equipmentOther:''}),'Please specify other equipment.');
+});
