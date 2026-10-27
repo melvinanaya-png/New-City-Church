@@ -2,7 +2,7 @@
 
 ## Current status
 
-Code is prepared, not deployed or live-verified. Render remains in its existing user-OAuth mode until explicitly changed. Do not weaken the organization's service-account-key policy or the 16-hour human reauthentication policy.
+Code is prepared, not deployed or live-verified. All 46 mocked tests and local form/redirect HTTP checks passed. The local Docker build could not finish because the Docker environment cannot resolve registry.npmjs.org (EAI_AGAIN); the same failure was reproduced with a package-registry-only container check. The deployment image still needs a successful Cloud Build before rollout. Render remains in its existing user-OAuth mode until explicitly changed. Do not weaken the organization's service-account-key policy or the 16-hour human reauthentication policy.
 
 The proposed setup uses one dedicated Cloud Run runtime service account:
 
